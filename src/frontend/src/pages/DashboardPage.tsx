@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -7,7 +8,8 @@ import {
   CalendarCheck,
   CheckCircle2,
   Clock,
-  MessageSquare,
+  GitBranch,
+  LayoutDashboard,
   Receipt,
   TrendingUp,
   Users,
@@ -32,6 +34,7 @@ function StatCard({
   loading,
   href,
   color,
+  badgeCount,
 }: {
   title: string;
   value: string | number;
@@ -39,10 +42,16 @@ function StatCard({
   loading?: boolean;
   href: string;
   color: string;
+  badgeCount?: number;
 }) {
   return (
     <Link to={href}>
-      <Card className="hover:shadow-elevated transition-shadow cursor-pointer group">
+      <Card className="hover:shadow-elevated transition-shadow cursor-pointer group relative overflow-hidden">
+        {badgeCount && badgeCount > 0 ? (
+          <span className="absolute top-2 right-2 inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold z-10">
+            {badgeCount}
+          </span>
+        ) : null}
         <CardContent className="pt-6">
           <div className="flex items-center justify-between">
             <div>
@@ -66,6 +75,49 @@ function StatCard({
           <div className="flex items-center gap-1 mt-3 text-xs text-muted-foreground group-hover:text-primary transition-colors">
             <span>View all</span>
             <ArrowRight size={12} />
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+// Quick action card — large, icon-forward, mobile-friendly
+function QuickActionCard({
+  label,
+  href,
+  icon,
+  description,
+  accent,
+}: {
+  label: string;
+  href: string;
+  icon: React.ReactNode;
+  description: string;
+  accent: string;
+}) {
+  return (
+    <Link to={href}>
+      <Card
+        className={`hover:shadow-elevated transition-all cursor-pointer group border-l-4 ${accent}`}
+      >
+        <CardContent className="pt-4 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors text-primary">
+              {icon}
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-sm text-foreground truncate">
+                {label}
+              </p>
+              <p className="text-xs text-muted-foreground truncate">
+                {description}
+              </p>
+            </div>
+            <ArrowRight
+              size={14}
+              className="flex-shrink-0 ml-auto text-muted-foreground group-hover:text-primary transition-colors"
+            />
           </div>
         </CardContent>
       </Card>
@@ -108,7 +160,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="p-6 md:p-8 space-y-8 animate-fade-in">
+    <div className="p-6 md:p-8 space-y-8 animate-fade-in pb-20 md:pb-8">
       {/* Header */}
       <div>
         <h1 className="font-display text-2xl md:text-3xl font-bold text-foreground">
@@ -125,6 +177,44 @@ export default function DashboardPage() {
         </p>
       </div>
 
+      {/* Quick Actions */}
+      <div>
+        <h2 className="font-display text-base font-semibold text-foreground mb-3 flex items-center gap-2">
+          <LayoutDashboard size={16} className="text-primary" />
+          Quick Actions
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          <QuickActionCard
+            label="Plan New Visit"
+            href="/visits"
+            icon={<CalendarCheck size={20} />}
+            description="Schedule a client visit"
+            accent="border-l-purple-400"
+          />
+          <QuickActionCard
+            label="Submit TA DA Claim"
+            href="/tada"
+            icon={<Receipt size={20} />}
+            description="Travel & daily allowance"
+            accent="border-l-amber-400"
+          />
+          <QuickActionCard
+            label="Add Client"
+            href="/clients"
+            icon={<Users size={20} />}
+            description="Register a new client"
+            accent="border-l-blue-400"
+          />
+          <QuickActionCard
+            label="Add PPI Entry"
+            href="/interactions"
+            icon={<GitBranch size={20} />}
+            description="Inquiry, offer, or order"
+            accent="border-l-emerald-400"
+          />
+        </div>
+      </div>
+
       {/* Stats Grid */}
       {isAdmin ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -137,7 +227,7 @@ export default function DashboardPage() {
             color="bg-blue-50"
           />
           <StatCard
-            title="Pipeline Items"
+            title="PPI Pipeline"
             value={
               pipelineLoading
                 ? "…"
@@ -159,6 +249,7 @@ export default function DashboardPage() {
             icon={<Receipt size={22} className="text-amber-700" />}
             href="/tada"
             color="bg-amber-50"
+            badgeCount={pendingClaims.length}
           />
           <StatCard
             title="Today's Visits"
@@ -187,7 +278,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Quick actions + recent */}
+      {/* Today's Visits + Pending Claims */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Today's Visits */}
         <Card>
@@ -228,7 +319,7 @@ export default function DashboardPage() {
                   >
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">
-                        {v.purpose}
+                        {v.purpose.replace(/\[GPS:[^\]]+\]\s*/, "")}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {formatDate(v.plannedDate)}
@@ -249,6 +340,14 @@ export default function DashboardPage() {
               <CardTitle className="font-display text-base flex items-center gap-2">
                 <Clock size={16} className="text-primary" />
                 {isAdmin ? "Pending TA DA Claims" : "My Recent Claims"}
+                {pendingClaims.length > 0 && (
+                  <Badge
+                    variant="destructive"
+                    className="text-[10px] h-4 px-1.5 ml-1"
+                  >
+                    {pendingClaims.length}
+                  </Badge>
+                )}
               </CardTitle>
               <Link to="/tada">
                 <Button variant="ghost" size="sm" className="text-xs gap-1">
@@ -290,55 +389,6 @@ export default function DashboardPage() {
             )}
           </CardContent>
         </Card>
-      </div>
-
-      {/* Quick Links */}
-      <div>
-        <h2 className="font-display text-lg font-semibold text-foreground mb-4">
-          Quick Actions
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          {[
-            {
-              label: "Add Client",
-              href: "/clients",
-              icon: <Users size={20} />,
-            },
-            {
-              label: "Add Interaction",
-              href: "/interactions",
-              icon: <MessageSquare size={20} />,
-            },
-            {
-              label: "Submit Claim",
-              href: "/tada",
-              icon: <Receipt size={20} />,
-            },
-            {
-              label: "Plan Visit",
-              href: "/visits",
-              icon: <CalendarCheck size={20} />,
-            },
-            {
-              label: "Marketing Report",
-              href: "/marketing-report",
-              icon: <TrendingUp size={20} />,
-            },
-          ].map((item) => (
-            <Link key={item.href} to={item.href}>
-              <Card className="hover:shadow-elevated transition-shadow cursor-pointer group">
-                <CardContent className="pt-4 pb-4 flex flex-col items-center gap-2 text-center">
-                  <span className="text-primary group-hover:scale-110 transition-transform">
-                    {item.icon}
-                  </span>
-                  <span className="text-xs font-medium text-foreground">
-                    {item.label}
-                  </span>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
       </div>
 
       {/* Footer */}

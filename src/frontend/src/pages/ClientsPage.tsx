@@ -8,6 +8,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,6 +20,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -33,6 +41,7 @@ import type { Principal } from "@icp-sdk/core/principal";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Building2,
+  Database,
   Eye,
   Loader2,
   Plus,
@@ -50,20 +59,159 @@ import {
   useDeleteClient,
 } from "../hooks/useQueries";
 
+// ── Industry type helpers ─────────────────────────────────────────────────────
+
+const INDUSTRY_OPTIONS = [
+  "Steel Plant",
+  "Cement Plant",
+  "Mining",
+  "Power Plant",
+  "Pharmaceutical",
+  "Textile",
+  "Other",
+];
+
+const INDUSTRY_BADGE_CLASSES: Record<string, string> = {
+  "Steel Plant": "bg-slate-50 text-slate-700 border-slate-200",
+  "Cement Plant": "bg-stone-50 text-stone-700 border-stone-200",
+  Mining: "bg-amber-50 text-amber-700 border-amber-200",
+  "Power Plant": "bg-yellow-50 text-yellow-700 border-yellow-200",
+  Pharmaceutical: "bg-blue-50 text-blue-700 border-blue-200",
+  Textile: "bg-purple-50 text-purple-700 border-purple-200",
+  Other: "bg-muted text-muted-foreground border-border",
+};
+
+function encodeIndustry(notes: string, industry: string): string {
+  const stripped = notes.replace(/\[IND:[^\]]*\]\s*/g, "");
+  if (!industry || industry === "none") return stripped;
+  return `[IND:${industry}]${stripped ? ` ${stripped}` : ""}`;
+}
+
+function extractIndustry(notes: string): string {
+  const m = notes.match(/\[IND:([^\]]+)\]/);
+  return m ? m[1] : "";
+}
+
+function stripIndustryTag(notes: string): string {
+  return notes.replace(/\[IND:[^\]]*\]\s*/g, "").trim();
+}
+
 const emptyForm = {
   name: "",
   company: "",
   phone: "",
   email: "",
   address: "",
+  industry: "none",
   notes: "",
 };
+
+const SAMPLE_CLIENTS = [
+  {
+    name: "Swapnil Sir",
+    company: "BRPL Barbil",
+    phone: "",
+    email: "",
+    address: "Barbil, Odisha",
+    notes: "[IND:Steel Plant] Supply payment follow-up",
+  },
+  {
+    name: "Aaksh Kumar",
+    company: "PPL Pradeep",
+    phone: "",
+    email: "",
+    address: "Pradeep, Odisha",
+    notes: "[IND:Steel Plant] Supply & service payment follow-up",
+  },
+  {
+    name: "Annant Kumar",
+    company: "Jagnnath Steel RSP Rourkela",
+    phone: "",
+    email: "",
+    address: "Rourkela, Odisha",
+    notes: "[IND:Steel Plant] 300 MTR liner inquiry, April expected",
+  },
+  {
+    name: "Uttam Poul",
+    company: "Rashmi Metallic Unit 1",
+    phone: "",
+    email: "",
+    address: "Khargpur, WB",
+    notes: "[IND:Steel Plant] Ceramic liner + 200 UHMWPE roller inquiry",
+  },
+  {
+    name: "Brijndan Mandal",
+    company: "JSL Jajpur",
+    phone: "",
+    email: "",
+    address: "Jajpur, Odisha",
+    notes: "[IND:Steel Plant] Ceramic liner + pallet plant inquiry",
+  },
+  {
+    name: "Contact",
+    company: "Shyam Metallic Khargpur",
+    phone: "",
+    email: "",
+    address: "Khargpur, WB",
+    notes: "[IND:Steel Plant] Roller offer finalization next week",
+  },
+  {
+    name: "Contact",
+    company: "IMFA Steel Jajpur",
+    phone: "",
+    email: "",
+    address: "Jajpur, Odisha",
+    notes: "[IND:Steel Plant] New project inquiry this month",
+  },
+  {
+    name: "Contact",
+    company: "Gerawa Steel Barbil",
+    phone: "",
+    email: "",
+    address: "Barbil, Odisha",
+    notes: "[IND:Steel Plant] Belt scraper requirement, visit required",
+  },
+  {
+    name: "Suni Giri",
+    company: "Bengal Energy Khargpur",
+    phone: "",
+    email: "",
+    address: "Khargpur, WB",
+    notes: "[IND:Power Plant] Visit planned",
+  },
+  {
+    name: "Anil Sahu",
+    company: "Rungta Kalyani",
+    phone: "",
+    email: "",
+    address: "Kalyani, WB",
+    notes: "[IND:Mining] 3300 MTR order + belt scraper finalization",
+  },
+  {
+    name: "Bhagat Ji",
+    company: "Vedanta Bhadrak",
+    phone: "",
+    email: "",
+    address: "Bhadrak, Odisha",
+    notes: "[IND:Steel Plant] Rubber panel finalization this month",
+  },
+  {
+    name: "Tapan",
+    company: "MECON Dhanbad",
+    phone: "",
+    email: "",
+    address: "Dhanbad, Jharkhand",
+    notes: "[IND:Other] Ceramic discussion, visit planned",
+  },
+];
 
 export default function ClientsPage() {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [deleteId, setDeleteId] = useState<bigint | null>(null);
+  const [phoneError, setPhoneError] = useState("");
+  const [isBulkAdding, setIsBulkAdding] = useState(false);
 
   const { data: clients, isLoading } = useClients();
   const createClient = useCreateClient();
@@ -79,10 +227,25 @@ export default function ClientsPage() {
       c.email.toLowerCase().includes(search.toLowerCase()),
   );
 
+  const validatePhone = (phone: string): boolean => {
+    if (!phone) return true; // optional
+    if (phone.replace(/\D/g, "").length !== 10) {
+      setPhoneError("Phone must be exactly 10 digits");
+      return false;
+    }
+    setPhoneError("");
+    return true;
+  };
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!identity) return;
+    if (!validatePhone(form.phone)) return;
     try {
+      const notesWithIndustry = encodeIndustry(
+        form.notes.trim(),
+        form.industry,
+      );
       await createClient.mutateAsync({
         id: 0n,
         name: form.name.trim(),
@@ -90,16 +253,43 @@ export default function ClientsPage() {
         phone: form.phone.trim(),
         email: form.email.trim(),
         address: form.address.trim(),
-        notes: form.notes.trim(),
+        notes: notesWithIndustry,
         createdAt: BigInt(Date.now()) * 1_000_000n,
         updatedAt: BigInt(Date.now()) * 1_000_000n,
         createdBy: identity.getPrincipal() as Principal,
       });
       toast.success("Client added successfully");
       setForm(emptyForm);
+      setPhoneError("");
       setAddOpen(false);
     } catch {
       toast.error("Failed to add client");
+    }
+  };
+
+  const handleBulkAdd = async () => {
+    if (!identity) return;
+    setIsBulkAdding(true);
+    try {
+      for (const c of SAMPLE_CLIENTS) {
+        await createClient.mutateAsync({
+          id: 0n,
+          name: c.name,
+          company: c.company,
+          phone: c.phone,
+          email: c.email,
+          address: c.address,
+          notes: c.notes,
+          createdAt: BigInt(Date.now()) * 1_000_000n,
+          updatedAt: BigInt(Date.now()) * 1_000_000n,
+          createdBy: identity.getPrincipal() as Principal,
+        });
+      }
+      toast.success("12 sample clients added!");
+    } catch {
+      toast.error("Failed to add some clients. Please try again.");
+    } finally {
+      setIsBulkAdding(false);
     }
   };
 
@@ -128,121 +318,194 @@ export default function ClientsPage() {
           </p>
         </div>
 
-        <Dialog open={addOpen} onOpenChange={setAddOpen}>
-          <DialogTrigger asChild>
-            <Button data-ocid="clients.add_button" className="gap-2">
-              <Plus size={16} />
-              Add Client
+        <div className="flex items-center gap-2 flex-wrap">
+          {!isLoading && (clients ?? []).length === 0 && (
+            <Button
+              variant="outline"
+              data-ocid="clients.sample.primary_button"
+              onClick={handleBulkAdd}
+              disabled={isBulkAdding || !identity}
+              className="gap-2"
+            >
+              {isBulkAdding ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Database size={16} />
+              )}
+              {isBulkAdding ? "Adding..." : "Add Sample Clients"}
             </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg" data-ocid="client.dialog">
-            <DialogHeader>
-              <DialogTitle className="font-display">Add New Client</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleAdd} className="space-y-4 mt-2">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="name">Name *</Label>
-                  <Input
-                    id="name"
-                    data-ocid="client.name.input"
-                    value={form.name}
-                    onChange={(e) =>
-                      setForm((p) => ({ ...p, name: e.target.value }))
-                    }
-                    placeholder="Contact name"
-                    required
-                  />
+          )}
+
+          <Dialog
+            open={addOpen}
+            onOpenChange={(o) => {
+              setAddOpen(o);
+              if (!o) {
+                setForm(emptyForm);
+                setPhoneError("");
+              }
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button data-ocid="clients.add_button" className="gap-2">
+                <Plus size={16} />
+                Add Client
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg" data-ocid="client.dialog">
+              <DialogHeader>
+                <DialogTitle className="font-display">
+                  Add New Client
+                </DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleAdd} className="space-y-4 mt-2">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="name">Name *</Label>
+                    <Input
+                      id="name"
+                      data-ocid="client.name.input"
+                      value={form.name}
+                      onChange={(e) =>
+                        setForm((p) => ({ ...p, name: e.target.value }))
+                      }
+                      placeholder="Contact name"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="company">Company *</Label>
+                    <Input
+                      id="company"
+                      data-ocid="client.company.input"
+                      value={form.company}
+                      onChange={(e) =>
+                        setForm((p) => ({ ...p, company: e.target.value }))
+                      }
+                      placeholder="Company name"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="phone">Phone</Label>
+                    <Input
+                      id="phone"
+                      data-ocid="client.phone.input"
+                      value={form.phone}
+                      onChange={(e) => {
+                        setForm((p) => ({ ...p, phone: e.target.value }));
+                        if (phoneError) validatePhone(e.target.value);
+                      }}
+                      onBlur={(e) => validatePhone(e.target.value)}
+                      placeholder="10-digit mobile number"
+                      inputMode="numeric"
+                    />
+                    {phoneError && (
+                      <p
+                        data-ocid="client.phone.error_state"
+                        className="text-xs text-destructive mt-1"
+                      >
+                        {phoneError}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      data-ocid="client.email.input"
+                      type="email"
+                      value={form.email}
+                      onChange={(e) =>
+                        setForm((p) => ({ ...p, email: e.target.value }))
+                      }
+                      placeholder="email@company.com"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="address">Address</Label>
+                    <Input
+                      id="address"
+                      data-ocid="client.address.input"
+                      value={form.address}
+                      onChange={(e) =>
+                        setForm((p) => ({ ...p, address: e.target.value }))
+                      }
+                      placeholder="Full address"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="industry">Industry Type</Label>
+                    <Select
+                      value={form.industry}
+                      onValueChange={(v) =>
+                        setForm((p) => ({ ...p, industry: v }))
+                      }
+                    >
+                      <SelectTrigger
+                        id="industry"
+                        data-ocid="client.industry.select"
+                      >
+                        <SelectValue placeholder="Select industry" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">
+                          — Select industry —
+                        </SelectItem>
+                        {INDUSTRY_OPTIONS.map((opt) => (
+                          <SelectItem key={opt} value={opt}>
+                            {opt}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="company">Company *</Label>
-                  <Input
-                    id="company"
-                    data-ocid="client.company.input"
-                    value={form.company}
+                  <Label htmlFor="notes">Notes</Label>
+                  <Textarea
+                    id="notes"
+                    data-ocid="client.notes.textarea"
+                    value={form.notes}
                     onChange={(e) =>
-                      setForm((p) => ({ ...p, company: e.target.value }))
+                      setForm((p) => ({ ...p, notes: e.target.value }))
                     }
-                    placeholder="Company name"
-                    required
+                    placeholder="Any additional notes..."
+                    rows={3}
                   />
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="phone">Phone</Label>
-                  <Input
-                    id="phone"
-                    data-ocid="client.phone.input"
-                    value={form.phone}
-                    onChange={(e) =>
-                      setForm((p) => ({ ...p, phone: e.target.value }))
-                    }
-                    placeholder="+91 9876543210"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    data-ocid="client.email.input"
-                    type="email"
-                    value={form.email}
-                    onChange={(e) =>
-                      setForm((p) => ({ ...p, email: e.target.value }))
-                    }
-                    placeholder="email@company.com"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="address">Address</Label>
-                <Input
-                  id="address"
-                  data-ocid="client.address.input"
-                  value={form.address}
-                  onChange={(e) =>
-                    setForm((p) => ({ ...p, address: e.target.value }))
-                  }
-                  placeholder="Full address"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea
-                  id="notes"
-                  data-ocid="client.notes.textarea"
-                  value={form.notes}
-                  onChange={(e) =>
-                    setForm((p) => ({ ...p, notes: e.target.value }))
-                  }
-                  placeholder="Any additional notes..."
-                  rows={3}
-                />
-              </div>
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  data-ocid="client.cancel_button"
-                  onClick={() => setAddOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  data-ocid="client.save_button"
-                  disabled={createClient.isPending}
-                >
-                  {createClient.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : null}
-                  Save Client
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    data-ocid="client.cancel_button"
+                    onClick={() => {
+                      setAddOpen(false);
+                      setForm(emptyForm);
+                      setPhoneError("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    data-ocid="client.save_button"
+                    disabled={createClient.isPending || !!phoneError}
+                  >
+                    {createClient.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    Save Client
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Search */}
@@ -269,6 +532,9 @@ export default function ClientsPage() {
               <TableHead className="font-semibold">Name</TableHead>
               <TableHead className="font-semibold">Company</TableHead>
               <TableHead className="font-semibold hidden md:table-cell">
+                Industry
+              </TableHead>
+              <TableHead className="font-semibold hidden md:table-cell">
                 Phone
               </TableHead>
               <TableHead className="font-semibold hidden lg:table-cell">
@@ -291,6 +557,9 @@ export default function ClientsPage() {
                     <Skeleton className="h-4 w-40" />
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
+                    <Skeleton className="h-4 w-24" />
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">
                     <Skeleton className="h-4 w-28" />
                   </TableCell>
                   <TableCell className="hidden lg:table-cell">
@@ -304,7 +573,7 @@ export default function ClientsPage() {
             ) : filtered.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   data-ocid="clients.empty_state"
                   className="text-center py-12 text-muted-foreground"
                 >
@@ -317,55 +586,75 @@ export default function ClientsPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((client, idx) => (
-                <TableRow
-                  key={client.id.toString()}
-                  data-ocid={`clients.item.${idx + 1}`}
-                  className="hover:bg-muted/30 cursor-pointer"
-                  onClick={() =>
-                    navigate({ to: `/clients/${client.id.toString()}` })
-                  }
-                >
-                  <TableCell className="font-medium">{client.name}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {client.company}
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground">
-                    {client.phone || "—"}
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell text-muted-foreground">
-                    {client.email || "—"}
-                  </TableCell>
-                  <TableCell>
-                    {/* biome-ignore lint/a11y/useKeyWithClickEvents: action cell stop-propagation wrapper */}
-                    <div
-                      className="flex items-center justify-end gap-1"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        data-ocid={`client.view_button.${idx + 1}`}
-                        onClick={() =>
-                          navigate({ to: `/clients/${client.id.toString()}` })
-                        }
-                        className="h-7 w-7"
+              filtered.map((client, idx) => {
+                const industry = extractIndustry(client.notes);
+                const industryClass =
+                  INDUSTRY_BADGE_CLASSES[industry] ??
+                  "bg-muted text-muted-foreground border-border";
+                return (
+                  <TableRow
+                    key={client.id.toString()}
+                    data-ocid={`clients.item.${idx + 1}`}
+                    className="hover:bg-muted/30 cursor-pointer"
+                    onClick={() =>
+                      navigate({ to: `/clients/${client.id.toString()}` })
+                    }
+                  >
+                    <TableCell className="font-medium">{client.name}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {client.company}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {industry ? (
+                        <Badge
+                          variant="outline"
+                          className={`text-xs ${industryClass}`}
+                        >
+                          {industry}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-muted-foreground">
+                      {client.phone || "—"}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell text-muted-foreground">
+                      {client.email || "—"}
+                    </TableCell>
+                    <TableCell>
+                      {/* biome-ignore lint/a11y/useKeyWithClickEvents: action cell stop-propagation wrapper */}
+                      <div
+                        className="flex items-center justify-end gap-1"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <Eye size={14} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        data-ocid={`client.delete_button.${idx + 1}`}
-                        onClick={() => setDeleteId(client.id)}
-                        className="h-7 w-7 text-destructive hover:text-destructive"
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          data-ocid={`client.view_button.${idx + 1}`}
+                          onClick={() =>
+                            navigate({
+                              to: `/clients/${client.id.toString()}`,
+                            })
+                          }
+                          className="h-7 w-7"
+                        >
+                          <Eye size={14} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          data-ocid={`client.delete_button.${idx + 1}`}
+                          onClick={() => setDeleteId(client.id)}
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -404,3 +693,6 @@ export default function ClientsPage() {
     </div>
   );
 }
+
+// Re-export helpers for ClientDetailPage if needed
+export { extractIndustry, stripIndustryTag };

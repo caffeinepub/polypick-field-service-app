@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -10,6 +11,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -34,11 +42,12 @@ import {
   ImageIcon,
   Loader2,
   Plus,
+  Printer,
   Receipt,
   Upload,
   XCircle,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Status__2 } from "../backend.d";
 import { StatusBadge } from "../components/StatusBadge";
@@ -66,14 +75,33 @@ function extractPhotoDataUrl(notes: string): string | null {
   return m ? m[1] : null;
 }
 
+function extractTag(notes: string, tag: string): string {
+  const m = notes.match(new RegExp(`\\[${tag}:([^\\]]*?)\\]`));
+  return m ? m[1] : "";
+}
+
 function buildNotesString(
   serviceReport: string,
   photoDataUrl: string | null,
+  billAmount: string,
+  fromLocation: string,
+  toLocation: string,
+  distanceKm: string,
+  transportType: string,
+  expenseCategory: string,
   extraNotes: string,
 ): string {
   let result = "";
   if (serviceReport) result += `[SR]${serviceReport}[/SR]`;
   if (photoDataUrl) result += `[PHOTO:${photoDataUrl}]`;
+  if (billAmount) result += `[BILL:${billAmount}]`;
+  if (fromLocation) result += `[FROM:${fromLocation}]`;
+  if (toLocation) result += `[TO:${toLocation}]`;
+  if (distanceKm) result += `[DIST:${distanceKm}]`;
+  if (transportType && transportType !== "none")
+    result += `[TRANS:${transportType}]`;
+  if (expenseCategory && expenseCategory !== "none")
+    result += `[CAT:${expenseCategory}]`;
   if (extraNotes) result += extraNotes;
   return result;
 }
@@ -87,10 +115,231 @@ const emptyForm = {
   serviceReport: "",
   photoDataUrl: null as string | null,
   photoUploadProgress: 0,
+  billAmount: "",
+  fromLocation: "",
+  toLocation: "",
+  distanceKm: "",
+  transportType: "none",
+  expenseCategory: "none",
 };
+
+// ── Camera Dialog Component ──────────────────────────────────────────────────
+
+function CameraDialog({
+  open,
+  onClose,
+  onCapture,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCapture: (dataUrl: string) => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [streaming, setStreaming] = useState(false);
+
+  const startCamera = useCallback(async () => {
+    setCameraError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+        setStreaming(true);
+      }
+    } catch {
+      setCameraError(
+        "Camera access denied or not available. Please use file upload instead.",
+      );
+    }
+  }, []);
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      for (const track of streamRef.current.getTracks()) {
+        track.stop();
+      }
+      streamRef.current = null;
+    }
+    setStreaming(false);
+  }, []);
+
+  const handleCapture = useCallback(() => {
+    if (!videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+    stopCamera();
+    onCapture(dataUrl);
+    onClose();
+  }, [stopCamera, onCapture, onClose]);
+
+  const handleClose = useCallback(() => {
+    stopCamera();
+    onClose();
+  }, [stopCamera, onClose]);
+
+  // Start camera when dialog opens
+  const handleOpenChange = useCallback(
+    (isOpen: boolean) => {
+      if (isOpen) {
+        startCamera();
+      } else {
+        handleClose();
+      }
+    },
+    [startCamera, handleClose],
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="max-w-lg" data-ocid="tada.camera.dialog">
+        <DialogHeader>
+          <DialogTitle className="font-display flex items-center gap-2">
+            <Camera size={18} className="text-primary" />
+            Take Bill Photo
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          {cameraError ? (
+            <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
+              {cameraError}
+            </div>
+          ) : (
+            <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+              <video
+                ref={videoRef}
+                className="w-full h-full object-cover"
+                playsInline
+                muted
+              />
+              {!streaming && (
+                <div className="absolute inset-0 flex items-center justify-center text-white text-sm">
+                  <Loader2 className="animate-spin mr-2" size={16} />
+                  Starting camera...
+                </div>
+              )}
+            </div>
+          )}
+          {/* Hidden canvas for capture */}
+          <canvas ref={canvasRef} className="hidden" />
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            data-ocid="tada.camera.cancel_button"
+            onClick={handleClose}
+          >
+            Cancel
+          </Button>
+          {!cameraError && (
+            <Button
+              type="button"
+              data-ocid="tada.camera.capture_button"
+              onClick={handleCapture}
+              disabled={!streaming}
+              className="gap-2"
+            >
+              <Camera size={16} />
+              Capture
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Print helper ─────────────────────────────────────────────────────────────
+
+function printClaim(claim: T__3) {
+  const billAmount = extractTag(claim.notes, "BILL");
+  const fromLoc = extractTag(claim.notes, "FROM");
+  const toLoc = extractTag(claim.notes, "TO");
+  const dist = extractTag(claim.notes, "DIST");
+  const trans = extractTag(claim.notes, "TRANS");
+  const cat = extractTag(claim.notes, "CAT");
+  const srText = extractServiceReport(claim.notes);
+  const photoUrl = extractPhotoDataUrl(claim.notes);
+  const totalAmount =
+    Number(claim.travelAllowance) +
+    Number(claim.dailyAllowance) +
+    (billAmount ? Number(billAmount) : 0);
+
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) return;
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>TA DA Claim Receipt</title>
+      <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; color: #111; }
+        .header { text-align: center; border-bottom: 2px solid #222; padding-bottom: 16px; margin-bottom: 24px; }
+        .header h1 { margin: 0; font-size: 22px; }
+        .header p { margin: 4px 0; color: #555; font-size: 13px; }
+        .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+        .row label { color: #666; font-size: 13px; }
+        .row span { font-weight: 600; }
+        .total { background: #f0f0f0; padding: 12px 16px; border-radius: 6px; margin-top: 16px; display: flex; justify-content: space-between; font-size: 18px; font-weight: bold; }
+        .section { margin-top: 20px; }
+        .section h3 { font-size: 13px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+        .sr { background: #f9f9f9; padding: 12px; border-left: 3px solid #333; white-space: pre-wrap; font-size: 13px; }
+        .photo { margin-top: 16px; }
+        .photo img { max-width: 100%; border: 1px solid #ddd; border-radius: 4px; }
+        .sign-line { margin-top: 40px; border-top: 1px solid #555; width: 200px; text-align: center; padding-top: 6px; font-size: 12px; color: #666; }
+        @media print { .no-print { display: none; } }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>Polypick Engineers Pvt Ltd</h1>
+        <p>TA DA Claim Receipt</p>
+        <p>Claim Date: ${new Date(Number(claim.date / 1_000_000n)).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
+        <p>Status: ${String(claim.status).toUpperCase()} ${claim.adminRemarks ? `— ${claim.adminRemarks}` : ""}</p>
+      </div>
+
+      ${fromLoc || toLoc ? `<div class="row"><label>Route</label><span>${fromLoc || "—"} → ${toLoc || "—"}${dist ? ` (${dist} km)` : ""}</span></div>` : ""}
+      ${trans && trans !== "none" ? `<div class="row"><label>Transport</label><span>${trans}</span></div>` : ""}
+      ${cat && cat !== "none" ? `<div class="row"><label>Category</label><span>${cat}</span></div>` : ""}
+      <div class="row"><label>Locations Visited</label><span>${claim.locationsVisited || "—"}</span></div>
+      <div class="row"><label>Travel Allowance</label><span>₹${Number(claim.travelAllowance).toLocaleString("en-IN")}</span></div>
+      <div class="row"><label>Daily Allowance</label><span>₹${Number(claim.dailyAllowance).toLocaleString("en-IN")}</span></div>
+      ${billAmount ? `<div class="row"><label>Bill Amount</label><span>₹${Number(billAmount).toLocaleString("en-IN")}</span></div>` : ""}
+      <div class="total"><span>TOTAL CLAIM</span><span>₹${totalAmount.toLocaleString("en-IN")}</span></div>
+
+      ${srText ? `<div class="section"><h3>Service Report</h3><div class="sr">${srText}</div></div>` : ""}
+      ${photoUrl ? `<div class="photo section"><h3>Bill Photo</h3><img src="${photoUrl}" alt="Bill" /></div>` : ""}
+
+      <div style="margin-top:40px; display:flex; justify-content:space-between;">
+        <div class="sign-line">Staff Signature</div>
+        <div class="sign-line">Admin Approval</div>
+      </div>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+}
+
+// ── Main Component ───────────────────────────────────────────────────────────
 
 export default function TaDaPage() {
   const [addOpen, setAddOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [remarksOpen, setRemarksOpen] = useState(false);
   const [remarksText, setRemarksText] = useState("");
@@ -119,7 +368,6 @@ export default function TaDaPage() {
     }
     setForm((p) => ({ ...p, photoUploadProgress: 0 }));
     const reader = new FileReader();
-    // Simulate progress via interval
     let progress = 0;
     const interval = setInterval(() => {
       progress += 20;
@@ -137,6 +385,20 @@ export default function TaDaPage() {
     reader.readAsDataURL(file);
   };
 
+  const handleCameraCapture = (dataUrl: string) => {
+    setForm((p) => ({
+      ...p,
+      photoDataUrl: dataUrl,
+      photoUploadProgress: 100,
+    }));
+    toast.success("Photo captured!");
+  };
+
+  const autoTotal =
+    (Number(form.travelAllowance) || 0) +
+    (Number(form.dailyAllowance) || 0) +
+    (Number(form.billAmount) || 0);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!identity) return;
@@ -144,6 +406,12 @@ export default function TaDaPage() {
       const notesStr = buildNotesString(
         form.serviceReport,
         form.photoDataUrl,
+        form.billAmount,
+        form.fromLocation,
+        form.toLocation,
+        form.distanceKm,
+        form.transportType,
+        form.expenseCategory,
         form.notes,
       );
       await submitClaim.mutateAsync({
@@ -208,6 +476,11 @@ export default function TaDaPage() {
   const renderClaimRow = (claim: T__3, idx: number) => {
     const srText = extractServiceReport(claim.notes);
     const photoUrl = extractPhotoDataUrl(claim.notes);
+    const billAmount = extractTag(claim.notes, "BILL");
+    const fromLoc = extractTag(claim.notes, "FROM");
+    const toLoc = extractTag(claim.notes, "TO");
+    const trans = extractTag(claim.notes, "TRANS");
+    const showRoute = fromLoc || toLoc;
 
     return (
       <TableRow
@@ -222,18 +495,23 @@ export default function TaDaPage() {
           </TableCell>
         )}
         <TableCell className="hidden sm:table-cell">
-          <div className="max-w-[180px]">
-            <p className="text-muted-foreground truncate text-sm">
+          <div className="max-w-[200px] space-y-0.5">
+            {showRoute && (
+              <p className="text-xs font-medium text-foreground">
+                {fromLoc || "—"} → {toLoc || "—"}
+              </p>
+            )}
+            <p className="text-muted-foreground truncate text-xs">
               {claim.locationsVisited || "—"}
             </p>
             {srText && (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <p className="text-xs text-primary/70 truncate mt-0.5 cursor-help flex items-center gap-1">
+                    <p className="text-xs text-primary/70 truncate cursor-help flex items-center gap-1">
                       <FileText size={10} />
-                      {srText.slice(0, 40)}
-                      {srText.length > 40 ? "…" : ""}
+                      {srText.slice(0, 35)}
+                      {srText.length > 35 ? "…" : ""}
                     </p>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs text-xs whitespace-pre-wrap">
@@ -246,11 +524,23 @@ export default function TaDaPage() {
             )}
           </div>
         </TableCell>
-        <TableCell>
+        <TableCell className="hidden md:table-cell text-sm">
+          {trans && trans !== "none" ? (
+            <Badge variant="outline" className="text-xs">
+              {trans}
+            </Badge>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </TableCell>
+        <TableCell className="text-sm">
           {Number(claim.travelAllowance).toLocaleString("en-IN")}
         </TableCell>
-        <TableCell className="hidden md:table-cell">
+        <TableCell className="hidden md:table-cell text-sm">
           {Number(claim.dailyAllowance).toLocaleString("en-IN")}
+        </TableCell>
+        <TableCell className="hidden lg:table-cell text-sm font-medium">
+          {billAmount ? `₹${Number(billAmount).toLocaleString("en-IN")}` : "—"}
         </TableCell>
         <TableCell>
           <div className="flex items-center gap-1.5">
@@ -264,6 +554,17 @@ export default function TaDaPage() {
                 title="View bill photo"
               >
                 <Camera size={12} className="text-primary" />
+              </button>
+            )}
+            {claim.status === "approved" && (
+              <button
+                type="button"
+                data-ocid={`tada.print_button.${idx + 1}`}
+                onClick={() => printClaim(claim)}
+                className="h-6 w-6 rounded bg-muted hover:bg-muted/70 flex items-center justify-center transition-colors"
+                title="Print claim receipt"
+              >
+                <Printer size={12} className="text-primary" />
               </button>
             )}
           </div>
@@ -365,7 +666,7 @@ export default function TaDaPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-border overflow-hidden shadow-xs">
+      <div className="rounded-lg border border-border overflow-x-auto shadow-xs">
         <Table data-ocid="tada.claims_table">
           <TableHeader>
             <TableRow className="bg-muted/30">
@@ -376,11 +677,17 @@ export default function TaDaPage() {
                 </TableHead>
               )}
               <TableHead className="font-semibold hidden sm:table-cell">
-                Locations / Report
+                Route / Locations
+              </TableHead>
+              <TableHead className="font-semibold hidden md:table-cell">
+                Transport
               </TableHead>
               <TableHead className="font-semibold">TA (₹)</TableHead>
               <TableHead className="font-semibold hidden md:table-cell">
                 DA (₹)
+              </TableHead>
+              <TableHead className="font-semibold hidden lg:table-cell">
+                Bill Amt
               </TableHead>
               <TableHead className="font-semibold">Status</TableHead>
               {isAdmin && (
@@ -395,7 +702,7 @@ export default function TaDaPage() {
               Array.from({ length: 5 }).map((_, i) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: skeleton loader
                 <TableRow key={`skeleton-${i}`}>
-                  {Array.from({ length: isAdmin ? 7 : 5 }).map((__, j) => (
+                  {Array.from({ length: isAdmin ? 9 : 7 }).map((__, j) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: skeleton loader
                     <TableCell key={`cell-${j}`}>
                       <Skeleton className="h-4 w-full" />
@@ -406,7 +713,7 @@ export default function TaDaPage() {
             ) : claims.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={isAdmin ? 7 : 5}
+                  colSpan={isAdmin ? 9 : 7}
                   data-ocid="tada.empty_state"
                   className="text-center py-12 text-muted-foreground"
                 >
@@ -430,7 +737,7 @@ export default function TaDaPage() {
         }}
       >
         <DialogContent
-          className="max-w-lg max-h-[90vh] overflow-y-auto"
+          className="max-w-2xl max-h-[90vh] overflow-y-auto"
           data-ocid="tada.submit.dialog"
         >
           <DialogHeader>
@@ -438,7 +745,8 @@ export default function TaDaPage() {
               Submit TA DA Claim
             </DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+          <form onSubmit={handleSubmit} className="space-y-5 mt-2">
+            {/* Date */}
             <div className="space-y-1.5">
               <Label>Date *</Label>
               <Input
@@ -451,7 +759,93 @@ export default function TaDaPage() {
                 required
               />
             </div>
+
+            {/* Expense Category */}
             <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Expense Category</Label>
+                <Select
+                  value={form.expenseCategory}
+                  onValueChange={(v) =>
+                    setForm((p) => ({ ...p, expenseCategory: v }))
+                  }
+                >
+                  <SelectTrigger data-ocid="tada.category.select">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— Select —</SelectItem>
+                    <SelectItem value="Travel">Travel</SelectItem>
+                    <SelectItem value="Food">Food</SelectItem>
+                    <SelectItem value="Accommodation">Accommodation</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Transport Type</Label>
+                <Select
+                  value={form.transportType}
+                  onValueChange={(v) =>
+                    setForm((p) => ({ ...p, transportType: v }))
+                  }
+                >
+                  <SelectTrigger data-ocid="tada.transport.select">
+                    <SelectValue placeholder="Select transport" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— Select —</SelectItem>
+                    <SelectItem value="Flight">✈️ Flight</SelectItem>
+                    <SelectItem value="Train">🚂 Train</SelectItem>
+                    <SelectItem value="Bus">🚌 Bus</SelectItem>
+                    <SelectItem value="Auto">🛺 Auto</SelectItem>
+                    <SelectItem value="Own Vehicle">🚗 Own Vehicle</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* From / To / Distance */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label>From</Label>
+                <Input
+                  data-ocid="tada.from.input"
+                  value={form.fromLocation}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, fromLocation: e.target.value }))
+                  }
+                  placeholder="Departure city"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>To</Label>
+                <Input
+                  data-ocid="tada.to.input"
+                  value={form.toLocation}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, toLocation: e.target.value }))
+                  }
+                  placeholder="Destination city"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Distance (km)</Label>
+                <Input
+                  data-ocid="tada.distance.input"
+                  type="number"
+                  min="0"
+                  value={form.distanceKm}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, distanceKm: e.target.value }))
+                  }
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            {/* Allowances + Bill Amount */}
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label>Travel Allowance (₹)</Label>
                 <Input
@@ -478,7 +872,34 @@ export default function TaDaPage() {
                   placeholder="0"
                 />
               </div>
+              <div className="space-y-1.5">
+                <Label>Bill Amount (₹)</Label>
+                <Input
+                  data-ocid="tada.bill_amount.input"
+                  type="number"
+                  min="0"
+                  value={form.billAmount}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, billAmount: e.target.value }))
+                  }
+                  placeholder="0"
+                />
+              </div>
             </div>
+
+            {/* Auto Total */}
+            {autoTotal > 0 && (
+              <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 flex items-center justify-between">
+                <span className="text-sm font-medium text-muted-foreground">
+                  Total Claim Amount
+                </span>
+                <span className="font-display text-xl font-bold text-primary">
+                  ₹{autoTotal.toLocaleString("en-IN")}
+                </span>
+              </div>
+            )}
+
+            {/* Locations Visited */}
             <div className="space-y-1.5">
               <Label>Locations Visited *</Label>
               <Input
@@ -491,6 +912,7 @@ export default function TaDaPage() {
                 required
               />
             </div>
+
             {/* Service Report */}
             <div className="space-y-1.5">
               <Label>Service Report / Daily Work</Label>
@@ -500,10 +922,11 @@ export default function TaDaPage() {
                 onChange={(e) =>
                   setForm((p) => ({ ...p, serviceReport: e.target.value }))
                 }
-                rows={4}
-                placeholder="Describe services performed, work completed, or issues resolved today..."
+                rows={3}
+                placeholder="Describe services performed, work completed..."
               />
             </div>
+
             {/* Bill Photo Upload */}
             <div className="space-y-2">
               <Label>Bill Photo</Label>
@@ -515,16 +938,30 @@ export default function TaDaPage() {
                 onChange={handlePhotoChange}
               />
               {!form.photoDataUrl ? (
-                <button
-                  type="button"
-                  data-ocid="tada.photo.upload_button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full border-2 border-dashed border-border rounded-lg p-4 flex flex-col items-center gap-2 text-muted-foreground hover:border-primary/50 hover:text-primary/70 transition-colors cursor-pointer"
-                >
-                  <Upload size={20} />
-                  <span className="text-sm">Click to upload bill photo</span>
-                  <span className="text-xs">Max 2MB · JPG, PNG, WEBP</span>
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    data-ocid="tada.photo.upload_button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1 border-2 border-dashed border-border rounded-lg p-3 flex flex-col items-center gap-1.5 text-muted-foreground hover:border-primary/50 hover:text-primary/70 transition-colors cursor-pointer"
+                  >
+                    <Upload size={18} />
+                    <span className="text-xs font-medium">
+                      Upload from Gallery
+                    </span>
+                    <span className="text-[10px]">Max 2MB</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-ocid="tada.camera.open_modal_button"
+                    onClick={() => setCameraOpen(true)}
+                    className="flex-1 border-2 border-dashed border-primary/30 rounded-lg p-3 flex flex-col items-center gap-1.5 text-primary/70 hover:border-primary hover:text-primary transition-colors cursor-pointer bg-primary/5"
+                  >
+                    <Camera size={18} />
+                    <span className="text-xs font-medium">Take Photo</span>
+                    <span className="text-[10px]">Use Camera</span>
+                  </button>
+                </div>
               ) : (
                 <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg border border-border">
                   <img
@@ -574,6 +1011,8 @@ export default function TaDaPage() {
                   </div>
                 )}
             </div>
+
+            {/* Additional Notes */}
             <div className="space-y-1.5">
               <Label>Additional Notes</Label>
               <Textarea
@@ -586,6 +1025,7 @@ export default function TaDaPage() {
                 placeholder="Any additional details..."
               />
             </div>
+
             <DialogFooter>
               <Button
                 type="button"
@@ -612,6 +1052,13 @@ export default function TaDaPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Camera Dialog */}
+      <CameraDialog
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onCapture={handleCameraCapture}
+      />
 
       {/* Approve/Reject Remarks Dialog */}
       <Dialog open={remarksOpen} onOpenChange={setRemarksOpen}>

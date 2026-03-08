@@ -6,20 +6,25 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   BarChart3,
   CalendarCheck,
+  FileText,
+  GitBranch,
   LayoutDashboard,
   LogOut,
   Menu,
-  MessageSquare,
   Receipt,
   TrendingUp,
   UserCog,
   Users,
-  Wrench,
   X,
 } from "lucide-react";
 import { useState } from "react";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
-import { useUserProfile } from "../hooks/useQueries";
+import {
+  useAllClaims,
+  useIsAdmin,
+  useMyClaims,
+  useUserProfile,
+} from "../hooks/useQueries";
 
 interface NavItem {
   label: string;
@@ -27,60 +32,8 @@ interface NavItem {
   icon: React.ReactNode;
   adminOnly?: boolean;
   ocid: string;
+  badge?: number;
 }
-
-const navItems: NavItem[] = [
-  {
-    label: "Dashboard",
-    href: "/",
-    icon: <LayoutDashboard size={18} />,
-    ocid: "nav.dashboard.link",
-  },
-  {
-    label: "Clients",
-    href: "/clients",
-    icon: <Users size={18} />,
-    ocid: "nav.clients.link",
-  },
-  {
-    label: "Interactions",
-    href: "/interactions",
-    icon: <MessageSquare size={18} />,
-    ocid: "nav.interactions.link",
-  },
-  {
-    label: "TA DA Claims",
-    href: "/tada",
-    icon: <Receipt size={18} />,
-    ocid: "nav.tada.link",
-  },
-  {
-    label: "Visit Planner",
-    href: "/visits",
-    icon: <CalendarCheck size={18} />,
-    ocid: "nav.visits.link",
-  },
-  {
-    label: "Marketing Report",
-    href: "/marketing-report",
-    icon: <TrendingUp size={18} />,
-    ocid: "nav.marketing_report.link",
-  },
-  {
-    label: "Reports",
-    href: "/reports",
-    icon: <BarChart3 size={18} />,
-    adminOnly: true,
-    ocid: "nav.reports.link",
-  },
-  {
-    label: "Staff",
-    href: "/staff",
-    icon: <UserCog size={18} />,
-    adminOnly: true,
-    ocid: "nav.staff.link",
-  },
-];
 
 interface SidebarProps {
   isAdmin: boolean;
@@ -90,8 +43,76 @@ export default function Sidebar({ isAdmin }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { clear } = useInternetIdentity();
   const { data: profile } = useUserProfile();
+  const { data: allClaims } = useAllClaims();
+  const { data: myClaims } = useMyClaims();
+  const { data: isAdminData } = useIsAdmin();
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
+
+  // Pending claims badge for admin
+  const pendingCount = isAdminData
+    ? (allClaims ?? []).filter((c) => c.status === "pending").length
+    : (myClaims ?? []).filter((c) => c.status === "pending").length;
+
+  const navItems: NavItem[] = [
+    {
+      label: "Dashboard",
+      href: "/",
+      icon: <LayoutDashboard size={18} />,
+      ocid: "nav.dashboard.link",
+    },
+    {
+      label: "Clients",
+      href: "/clients",
+      icon: <Users size={18} />,
+      ocid: "nav.clients.link",
+    },
+    {
+      label: "PPI",
+      href: "/interactions",
+      icon: <GitBranch size={18} />,
+      ocid: "nav.interactions.link",
+    },
+    {
+      label: "TA DA Claims",
+      href: "/tada",
+      icon: <Receipt size={18} />,
+      ocid: "nav.tada.link",
+      badge: pendingCount > 0 ? pendingCount : undefined,
+    },
+    {
+      label: "Visit Planner",
+      href: "/visits",
+      icon: <CalendarCheck size={18} />,
+      ocid: "nav.visits.link",
+    },
+    {
+      label: "Daily Report",
+      href: "/daily-report",
+      icon: <FileText size={18} />,
+      ocid: "nav.daily_report.link",
+    },
+    {
+      label: "Marketing Report",
+      href: "/marketing-report",
+      icon: <TrendingUp size={18} />,
+      ocid: "nav.marketing_report.link",
+    },
+    {
+      label: "Reports",
+      href: "/reports",
+      icon: <BarChart3 size={18} />,
+      adminOnly: true,
+      ocid: "nav.reports.link",
+    },
+    {
+      label: "Staff",
+      href: "/staff",
+      icon: <UserCog size={18} />,
+      adminOnly: true,
+      ocid: "nav.staff.link",
+    },
+  ];
 
   const visibleItems = navItems.filter((item) => !item.adminOnly || isAdmin);
 
@@ -153,7 +174,12 @@ export default function Sidebar({ isAdmin }: SidebarProps) {
             >
               {item.icon}
             </span>
-            <span className="truncate">{item.label}</span>
+            <span className="truncate flex-1">{item.label}</span>
+            {item.badge !== undefined && item.badge > 0 && (
+              <span className="inline-flex items-center justify-center h-4 min-w-[1rem] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex-shrink-0">
+                {item.badge > 99 ? "99+" : item.badge}
+              </span>
+            )}
           </Link>
         ))}
       </nav>
@@ -193,6 +219,7 @@ export default function Sidebar({ isAdmin }: SidebarProps) {
         size="icon"
         className="fixed top-4 left-4 z-50 md:hidden bg-sidebar text-sidebar-foreground shadow-md"
         onClick={() => setMobileOpen(!mobileOpen)}
+        data-ocid="nav.mobile.toggle"
       >
         {mobileOpen ? <X size={20} /> : <Menu size={20} />}
       </Button>

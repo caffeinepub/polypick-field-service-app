@@ -2,10 +2,12 @@ import { Outlet, createRootRoute, createRoute } from "@tanstack/react-router";
 import RootLayout from "./layouts/RootLayout";
 import ClientDetailPage from "./pages/ClientDetailPage";
 import ClientsPage from "./pages/ClientsPage";
+import DailyReportPage from "./pages/DailyReportPage";
 import DashboardPage from "./pages/DashboardPage";
 import InteractionsPage from "./pages/InteractionsPage";
 import LoginPage from "./pages/LoginPage";
 import MarketingReportPage from "./pages/MarketingReportPage";
+import ProfilePage from "./pages/ProfilePage";
 import ProfileSetupPage from "./pages/ProfileSetupPage";
 import ReportsPage from "./pages/ReportsPage";
 import StaffPage from "./pages/StaffPage";
@@ -88,6 +90,18 @@ const marketingReportRoute = createRoute({
   component: MarketingReportPage,
 });
 
+const profileRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/profile",
+  component: ProfilePage,
+});
+
+const dailyReportRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/daily-report",
+  component: DailyReportPage,
+});
+
 export const routeTree = rootRoute.addChildren([
   loginRoute,
   profileSetupRoute,
@@ -101,5 +115,7 @@ export const routeTree = rootRoute.addChildren([
     reportsRoute,
     staffRoute,
     marketingReportRoute,
+    profileRoute,
+    dailyReportRoute,
   ]),
 ]);

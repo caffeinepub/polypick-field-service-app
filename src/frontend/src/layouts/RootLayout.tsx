@@ -1,6 +1,7 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Outlet, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect } from "react";
+import BottomNav from "../components/BottomNav";
 import Sidebar from "../components/Sidebar";
 import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
@@ -57,9 +58,10 @@ export default function RootLayout() {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar isAdmin={isAdmin ?? false} />
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
         <Outlet />
       </main>
+      <BottomNav />
     </div>
   );
 }

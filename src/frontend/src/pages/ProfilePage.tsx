@@ -1,0 +1,161 @@
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Briefcase,
+  CalendarDays,
+  LogOut,
+  Mail,
+  Shield,
+  User,
+} from "lucide-react";
+import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import { useIsAdmin, useUserProfile } from "../hooks/useQueries";
+
+export default function ProfilePage() {
+  const { identity, clear } = useInternetIdentity();
+  const { data: profile } = useUserProfile();
+  const { data: isAdmin } = useIsAdmin();
+
+  const principal = identity?.getPrincipal().toString() ?? "";
+  const createdAt = profile?.createdAt
+    ? new Date(Number(profile.createdAt / 1_000_000n)).toLocaleDateString(
+        "en-IN",
+        { day: "numeric", month: "long", year: "numeric" },
+      )
+    : "—";
+
+  return (
+    <div className="p-6 md:p-8 space-y-6 animate-fade-in pb-20 md:pb-8">
+      <div>
+        <h1 className="font-display text-2xl font-bold text-foreground flex items-center gap-2">
+          <User size={24} className="text-primary" />
+          My Profile
+        </h1>
+        <p className="text-muted-foreground text-sm mt-0.5">
+          Your account information
+        </p>
+      </div>
+
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-4">
+            <Avatar className="h-16 w-16">
+              <AvatarFallback className="text-2xl font-bold bg-primary/10 text-primary">
+                {profile?.name?.charAt(0)?.toUpperCase() ?? "U"}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <h2 className="font-display text-xl font-bold text-foreground">
+                {profile?.name ?? "—"}
+              </h2>
+              <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                <Shield size={13} />
+                {isAdmin ? "Administrator" : "Field Staff"}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="font-display text-base">
+            Account Details
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="h-8 w-8 rounded-md bg-blue-50 flex items-center justify-center flex-shrink-0">
+              <User size={16} className="text-blue-600" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground font-medium">
+                Full Name
+              </p>
+              <p className="text-sm font-medium text-foreground">
+                {profile?.name ?? "—"}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <div className="h-8 w-8 rounded-md bg-emerald-50 flex items-center justify-center flex-shrink-0">
+              <Shield size={16} className="text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground font-medium">Role</p>
+              <p className="text-sm font-medium text-foreground">
+                {isAdmin ? "Administrator" : "Field Staff"}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <div className="h-8 w-8 rounded-md bg-amber-50 flex items-center justify-center flex-shrink-0">
+              <CalendarDays size={16} className="text-amber-600" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground font-medium">
+                Member Since
+              </p>
+              <p className="text-sm font-medium text-foreground">{createdAt}</p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <div className="h-8 w-8 rounded-md bg-purple-50 flex items-center justify-center flex-shrink-0">
+              <Mail size={16} className="text-purple-600" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground font-medium">
+                Principal ID
+              </p>
+              <p className="text-xs font-mono text-muted-foreground break-all">
+                {principal ? `${principal.slice(0, 20)}…` : "—"}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <div className="h-8 w-8 rounded-md bg-slate-50 flex items-center justify-center flex-shrink-0">
+              <Briefcase size={16} className="text-slate-600" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground font-medium">
+                Organisation
+              </p>
+              <p className="text-sm font-medium text-foreground">
+                Polypick Engineers Pvt Ltd
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Button
+        variant="outline"
+        className="w-full gap-2 text-destructive border-destructive/30 hover:bg-destructive/5 hover:text-destructive"
+        onClick={clear}
+        data-ocid="profile.signout_button"
+      >
+        <LogOut size={16} />
+        Sign Out
+      </Button>
+
+      <footer className="pt-2 border-t border-border">
+        <p className="text-xs text-muted-foreground text-center">
+          © {new Date().getFullYear()}. Built with ❤️ using{" "}
+          <a
+            href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(typeof window !== "undefined" ? window.location.hostname : "")}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground transition-colors"
+          >
+            caffeine.ai
+          </a>
+        </p>
+      </footer>
+    </div>
+  );
+}

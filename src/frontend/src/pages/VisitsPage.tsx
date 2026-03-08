@@ -8,6 +8,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -39,6 +40,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type { Principal } from "@icp-sdk/core/principal";
 import {
+  ArrowRight,
   CalendarCheck,
   CheckCircle2,
   Loader2,
@@ -72,10 +74,51 @@ import {
 
 const STATUS_TABS = ["all", "planned", "completed", "cancelled"];
 
+// ── Travel metadata helpers ──────────────────────────────────────────────────
+
+function encodeTravelMeta(
+  from: string,
+  to: string,
+  dist: string,
+  purpose: string,
+): string {
+  let prefix = "";
+  if (from) prefix += `[FROM:${from}]`;
+  if (to) prefix += `[TO:${to}]`;
+  if (dist) prefix += `[DIST:${dist}]`;
+  return prefix ? `${prefix} ${purpose}` : purpose;
+}
+
+function decodeTravelMeta(purposeStr: string): {
+  from: string;
+  to: string;
+  dist: string;
+  purpose: string;
+} {
+  const fromM = purposeStr.match(/\[FROM:([^\]]*)\]/);
+  const toM = purposeStr.match(/\[TO:([^\]]*)\]/);
+  const distM = purposeStr.match(/\[DIST:([^\]]*)\]/);
+  const stripped = purposeStr
+    .replace(/\[FROM:[^\]]*\]/g, "")
+    .replace(/\[TO:[^\]]*\]/g, "")
+    .replace(/\[DIST:[^\]]*\]/g, "")
+    .replace(/\[GPS:[^\]]+\]\s*/g, "")
+    .trim();
+  return {
+    from: fromM ? fromM[1] : "",
+    to: toM ? toM[1] : "",
+    dist: distM ? distM[1] : "",
+    purpose: stripped,
+  };
+}
+
 const emptyForm = {
   clientId: "",
   plannedDate: todayInputStr(),
   purpose: "",
+  fromLocation: "",
+  toLocation: "",
+  distanceKm: "",
   capturedGps: null as { lat: number; lng: number } | null,
   capturingGps: false,
 };
@@ -193,9 +236,15 @@ export default function VisitsPage() {
     e.preventDefault();
     if (!identity || !form.clientId) return;
     try {
+      const travelPurpose = encodeTravelMeta(
+        form.fromLocation,
+        form.toLocation,
+        form.distanceKm,
+        form.purpose.trim(),
+      );
       const purposeWithGps = form.capturedGps
-        ? `${formatGPS(form.capturedGps.lat, form.capturedGps.lng)} ${form.purpose.trim()}`
-        : form.purpose.trim();
+        ? `${formatGPS(form.capturedGps.lat, form.capturedGps.lng)} ${travelPurpose}`
+        : travelPurpose;
       await createVisit.mutateAsync({
         id: 0n,
         userId: identity.getPrincipal() as Principal,
@@ -257,7 +306,7 @@ export default function VisitsPage() {
   };
 
   return (
-    <div className="p-6 md:p-8 space-y-6 animate-fade-in">
+    <div className="p-6 md:p-8 space-y-6 animate-fade-in pb-20 md:pb-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -333,7 +382,7 @@ export default function VisitsPage() {
                     <TableHead className="font-semibold">Date</TableHead>
                     <TableHead className="font-semibold">Client</TableHead>
                     <TableHead className="font-semibold hidden md:table-cell">
-                      Purpose
+                      Route / Purpose
                     </TableHead>
                     {isAdmin && (
                       <TableHead className="font-semibold hidden lg:table-cell">
@@ -378,6 +427,8 @@ export default function VisitsPage() {
                       const gps = parseGPS(
                         visit.completionNotes || visit.purpose,
                       );
+                      const meta = decodeTravelMeta(visit.purpose);
+                      const showRoute = meta.from || meta.to;
                       return (
                         <TableRow
                           key={visit.id.toString()}
@@ -390,13 +441,33 @@ export default function VisitsPage() {
                           <TableCell className="text-muted-foreground">
                             {getClientName(visit.clientId)}
                           </TableCell>
-                          <TableCell className="hidden md:table-cell text-muted-foreground max-w-[200px]">
-                            <span className="truncate block">
-                              {(visit.purpose || "—").replace(
-                                /\[GPS:[^\]]+\]\s*/,
-                                "",
-                              )}
-                            </span>
+                          <TableCell className="hidden md:table-cell text-muted-foreground max-w-[220px]">
+                            {showRoute ? (
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-1 text-xs font-medium text-foreground">
+                                  <span>{meta.from || "—"}</span>
+                                  <ArrowRight size={10} />
+                                  <span>{meta.to || "—"}</span>
+                                  {meta.dist && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] px-1 py-0"
+                                    >
+                                      {meta.dist} km
+                                    </Badge>
+                                  )}
+                                </div>
+                                {meta.purpose && (
+                                  <p className="truncate text-xs text-muted-foreground">
+                                    {meta.purpose}
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="truncate block">
+                                {meta.purpose || "—"}
+                              </span>
+                            )}
                           </TableCell>
                           {isAdmin && (
                             <TableCell className="hidden lg:table-cell text-xs font-mono text-muted-foreground">
@@ -528,41 +599,83 @@ export default function VisitsPage() {
           if (!o) setForm(emptyForm);
         }}
       >
-        <DialogContent className="max-w-md" data-ocid="visits.add.dialog">
+        <DialogContent className="max-w-lg" data-ocid="visits.add.dialog">
           <DialogHeader>
             <DialogTitle className="font-display">Plan New Visit</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleAdd} className="space-y-4 mt-2">
-            <div className="space-y-1.5">
-              <Label>Client *</Label>
-              <Select
-                value={form.clientId}
-                onValueChange={(v) => setForm((p) => ({ ...p, clientId: v }))}
-              >
-                <SelectTrigger data-ocid="visits.client.select">
-                  <SelectValue placeholder="Select client" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(clients ?? []).map((c) => (
-                    <SelectItem key={c.id.toString()} value={c.id.toString()}>
-                      {c.name} – {c.company}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Client *</Label>
+                <Select
+                  value={form.clientId}
+                  onValueChange={(v) => setForm((p) => ({ ...p, clientId: v }))}
+                >
+                  <SelectTrigger data-ocid="visits.client.select">
+                    <SelectValue placeholder="Select client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(clients ?? []).map((c) => (
+                      <SelectItem key={c.id.toString()} value={c.id.toString()}>
+                        {c.name} – {c.company}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Planned Date *</Label>
+                <Input
+                  data-ocid="visits.date.input"
+                  type="date"
+                  value={form.plannedDate}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, plannedDate: e.target.value }))
+                  }
+                  required
+                />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label>Planned Date *</Label>
-              <Input
-                data-ocid="visits.date.input"
-                type="date"
-                value={form.plannedDate}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, plannedDate: e.target.value }))
-                }
-                required
-              />
+
+            {/* From / To / Distance */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label>From (optional)</Label>
+                <Input
+                  data-ocid="visits.from.input"
+                  value={form.fromLocation}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, fromLocation: e.target.value }))
+                  }
+                  placeholder="Departure"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>To (optional)</Label>
+                <Input
+                  data-ocid="visits.to.input"
+                  value={form.toLocation}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, toLocation: e.target.value }))
+                  }
+                  placeholder="Destination"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Distance (km)</Label>
+                <Input
+                  data-ocid="visits.distance.input"
+                  type="number"
+                  min="0"
+                  value={form.distanceKm}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, distanceKm: e.target.value }))
+                  }
+                  placeholder="0"
+                />
+              </div>
             </div>
+
             <div className="space-y-1.5">
               <Label>Purpose *</Label>
               <Textarea

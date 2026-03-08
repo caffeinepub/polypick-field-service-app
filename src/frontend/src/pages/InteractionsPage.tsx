@@ -40,10 +40,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type { Principal } from "@icp-sdk/core/principal";
 import {
+  GitBranch,
   Loader2,
-  MessageSquare,
   Pencil,
   Plus,
+  Search,
   Trash2,
   TrendingUp,
 } from "lucide-react";
@@ -67,12 +68,51 @@ import {
   todayInputStr,
 } from "../utils/dateUtils";
 
-const TYPES = ["all", "inquiry", "offer", "order", "followup"];
+const TYPES = ["all", "inquiry", "offer", "order", "service", "payment"];
+
+// ── Priority helpers ─────────────────────────────────────────────────────────
+const PRIORITY_PREFIX_REGEX = /^\[P:(HIGH|MEDIUM|LOW)\]\s*/;
+
+function encodePriority(title: string, priority: string): string {
+  const stripped = title.replace(PRIORITY_PREFIX_REGEX, "");
+  if (!priority || priority === "none") return stripped;
+  return `[P:${priority.toUpperCase()}] ${stripped}`;
+}
+
+function decodePriority(title: string): {
+  displayTitle: string;
+  priority: string;
+} {
+  const m = title.match(PRIORITY_PREFIX_REGEX);
+  if (m) {
+    return {
+      displayTitle: title.replace(PRIORITY_PREFIX_REGEX, ""),
+      priority: m[1].toLowerCase(),
+    };
+  }
+  return { displayTitle: title, priority: "none" };
+}
+
+// ── Type badge colors ─────────────────────────────────────────────────────────
+const TYPE_BADGE_CLASSES: Record<string, string> = {
+  inquiry: "bg-blue-50 text-blue-700 border-blue-200",
+  offer: "bg-amber-50 text-amber-700 border-amber-200",
+  order: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  service: "bg-purple-50 text-purple-700 border-purple-200",
+  payment: "bg-red-50 text-red-700 border-red-200",
+};
+
+const PRIORITY_BADGE_CLASSES: Record<string, string> = {
+  high: "bg-red-50 text-red-700 border-red-200",
+  medium: "bg-amber-50 text-amber-700 border-amber-200",
+  low: "bg-blue-50 text-blue-700 border-blue-200",
+};
 
 const emptyForm = {
   clientId: "",
   type: "inquiry",
   title: "",
+  priority: "none",
   description: "",
   status: "open",
   amount: "",
@@ -86,6 +126,7 @@ export default function InteractionsPage() {
   const [deleteId, setDeleteId] = useState<bigint | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<bigint | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: interactions, isLoading } = useInteractions();
   const { data: clients } = useClients();
@@ -98,19 +139,44 @@ export default function InteractionsPage() {
   const getClientName = (id: bigint) =>
     clients?.find((c) => c.id === id)?.name ?? `Client #${id}`;
 
-  const filtered = (interactions ?? []).filter(
-    (i) => activeTab === "all" || i.type === activeTab,
+  const allInteractions = interactions ?? [];
+
+  // Count per type for badges
+  const countByType = TYPES.reduce(
+    (acc, t) => {
+      acc[t] =
+        t === "all"
+          ? allInteractions.length
+          : allInteractions.filter((i) => i.type === t).length;
+      return acc;
+    },
+    {} as Record<string, number>,
   );
+
+  const filtered = allInteractions
+    .filter((i) => activeTab === "all" || i.type === activeTab)
+    .filter((i) => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      const clientName = getClientName(i.clientId).toLowerCase();
+      const { displayTitle } = decodePriority(i.title);
+      return (
+        displayTitle.toLowerCase().includes(q) ||
+        clientName.includes(q) ||
+        i.description.toLowerCase().includes(q)
+      );
+    });
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!identity || !form.clientId) return;
     try {
+      const encodedTitle = encodePriority(form.title.trim(), form.priority);
       await createInteraction.mutateAsync({
         id: 0n,
         clientId: BigInt(form.clientId),
         type: form.type,
-        title: form.title.trim(),
+        title: encodedTitle,
         description: form.description.trim(),
         status: form.status as T__1["status"],
         amount: form.amount ? BigInt(form.amount) : undefined,
@@ -118,20 +184,22 @@ export default function InteractionsPage() {
         createdBy: identity.getPrincipal() as Principal,
         updatedAt: BigInt(Date.now()) * 1_000_000n,
       });
-      toast.success("Interaction added");
+      toast.success("PPI entry added");
       setForm(emptyForm);
       setAddOpen(false);
     } catch {
-      toast.error("Failed to add interaction");
+      toast.error("Failed to add PPI entry");
     }
   };
 
   const handleEditOpen = (int: T__1) => {
     setEditingId(int.id);
+    const { displayTitle, priority } = decodePriority(int.title);
     setForm({
       clientId: int.clientId.toString(),
       type: int.type,
-      title: int.title,
+      title: displayTitle,
+      priority,
       description: int.description,
       status: int.status,
       amount: int.amount !== undefined ? int.amount.toString() : "",
@@ -146,13 +214,14 @@ export default function InteractionsPage() {
     const orig = interactions?.find((i) => i.id === editingId);
     if (!orig) return;
     try {
+      const encodedTitle = encodePriority(form.title.trim(), form.priority);
       await updateInteraction.mutateAsync({
         id: editingId,
         interaction: {
           ...orig,
           clientId: BigInt(form.clientId),
           type: form.type,
-          title: form.title.trim(),
+          title: encodedTitle,
           description: form.description.trim(),
           status: form.status as T__1["status"],
           amount: form.amount ? BigInt(form.amount) : undefined,
@@ -160,11 +229,11 @@ export default function InteractionsPage() {
           updatedAt: BigInt(Date.now()) * 1_000_000n,
         },
       });
-      toast.success("Interaction updated");
+      toast.success("PPI entry updated");
       setEditOpen(false);
       setEditingId(null);
     } catch {
-      toast.error("Failed to update interaction");
+      toast.error("Failed to update PPI entry");
     }
   };
 
@@ -172,7 +241,7 @@ export default function InteractionsPage() {
     if (deleteId === null) return;
     try {
       await deleteInteraction.mutateAsync(deleteId);
-      toast.success("Interaction deleted");
+      toast.success("Entry deleted");
       setDeleteId(null);
     } catch {
       toast.error("Failed to delete");
@@ -216,20 +285,40 @@ export default function InteractionsPage() {
               <SelectItem value="inquiry">Inquiry</SelectItem>
               <SelectItem value="offer">Offer</SelectItem>
               <SelectItem value="order">Order</SelectItem>
-              <SelectItem value="followup">Follow-up</SelectItem>
+              <SelectItem value="service">Service</SelectItem>
+              <SelectItem value="payment">Payment</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
-      <div className="space-y-1.5">
-        <Label>Title *</Label>
-        <Input
-          data-ocid="interaction.title.input"
-          value={form.title}
-          onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
-          required
-          placeholder="e.g. Pump supply inquiry"
-        />
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label>Title *</Label>
+          <Input
+            data-ocid="interaction.title.input"
+            value={form.title}
+            onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
+            required
+            placeholder="e.g. Pump supply inquiry"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Priority</Label>
+          <Select
+            value={form.priority}
+            onValueChange={(v) => setForm((p) => ({ ...p, priority: v }))}
+          >
+            <SelectTrigger data-ocid="interaction.priority.select">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">— None —</SelectItem>
+              <SelectItem value="high">🔴 High</SelectItem>
+              <SelectItem value="medium">🟡 Medium</SelectItem>
+              <SelectItem value="low">🔵 Low</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       <div className="space-y-1.5">
         <Label>Description</Label>
@@ -316,11 +405,11 @@ export default function InteractionsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground flex items-center gap-2">
-            <MessageSquare size={24} className="text-primary" />
-            Interactions & Pipeline
+            <GitBranch size={24} className="text-primary" />
+            PPI – Sales Pipeline
           </h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            Track inquiries, offers, orders, and follow-ups
+            Track inquiries, offers, orders, services &amp; payments
           </p>
         </div>
         <Button
@@ -332,7 +421,7 @@ export default function InteractionsPage() {
           className="gap-2"
         >
           <Plus size={16} />
-          Add Interaction
+          Add PPI Entry
         </Button>
       </div>
 
@@ -384,18 +473,47 @@ export default function InteractionsPage() {
         </div>
       )}
 
+      {/* Search */}
+      <div className="relative max-w-sm">
+        <Search
+          size={16}
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          data-ocid="interactions.search_input"
+          type="text"
+          placeholder="Search by client, title..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       {/* Tabs + Table */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList data-ocid="interactions.tab">
-          {TYPES.map((t) => (
-            <TabsTrigger key={t} value={t} className="capitalize">
-              {t === "followup"
-                ? "Follow-up"
-                : t === "all"
-                  ? "All"
-                  : t.charAt(0).toUpperCase() + t.slice(1)}
-            </TabsTrigger>
-          ))}
+        <TabsList
+          data-ocid="interactions.tab"
+          className="flex-wrap h-auto gap-1"
+        >
+          {TYPES.map((t) => {
+            const count = countByType[t] ?? 0;
+            const label =
+              t === "all" ? "All" : t.charAt(0).toUpperCase() + t.slice(1);
+            return (
+              <TabsTrigger
+                key={t}
+                value={t}
+                className="capitalize text-xs sm:text-sm"
+              >
+                {label}
+                {count > 0 && (
+                  <span className="ml-1.5 inline-flex items-center justify-center h-4 min-w-[1rem] px-1 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
+                    {count}
+                  </span>
+                )}
+              </TabsTrigger>
+            );
+          })}
         </TabsList>
 
         {TYPES.map((tab) => (
@@ -410,6 +528,9 @@ export default function InteractionsPage() {
                       Type
                     </TableHead>
                     <TableHead className="font-semibold">Status</TableHead>
+                    <TableHead className="font-semibold hidden sm:table-cell">
+                      Priority
+                    </TableHead>
                     <TableHead className="font-semibold hidden lg:table-cell">
                       Amount
                     </TableHead>
@@ -426,7 +547,7 @@ export default function InteractionsPage() {
                     Array.from({ length: 4 }).map((_, i) => (
                       // biome-ignore lint/suspicious/noArrayIndexKey: skeleton loader
                       <TableRow key={`skeleton-${i}`}>
-                        {Array.from({ length: 7 }).map((__, j) => (
+                        {Array.from({ length: 8 }).map((__, j) => (
                           // biome-ignore lint/suspicious/noArrayIndexKey: skeleton loader
                           <TableCell key={`cell-${j}`}>
                             <Skeleton className="h-4 w-full" />
@@ -437,73 +558,102 @@ export default function InteractionsPage() {
                   ) : filtered.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={7}
+                        colSpan={8}
                         data-ocid="interactions.empty_state"
                         className="text-center py-12 text-muted-foreground"
                       >
-                        <MessageSquare
+                        <GitBranch
                           size={36}
                           className="mx-auto mb-2 opacity-30"
                         />
-                        <p className="text-sm">No interactions found</p>
+                        <p className="text-sm">No PPI entries found</p>
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filtered.map((int, idx) => (
-                      <TableRow
-                        key={int.id.toString()}
-                        data-ocid={`interactions.item.${idx + 1}`}
-                        className="hover:bg-muted/20"
-                      >
-                        <TableCell className="font-medium max-w-[200px] truncate">
-                          {int.title}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {getClientName(int.clientId)}
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          <Badge
-                            variant="outline"
-                            className="capitalize text-xs"
-                          >
-                            {int.type === "followup" ? "Follow-up" : int.type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge status={int.status} />
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell text-muted-foreground">
-                          {int.amount !== undefined
-                            ? `₹${Number(int.amount).toLocaleString("en-IN")}`
-                            : "—"}
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell text-muted-foreground">
-                          {formatDate(int.date)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              data-ocid={`interactions.edit_button.${idx + 1}`}
-                              onClick={() => handleEditOpen(int)}
-                              className="h-7 w-7"
+                    filtered.map((int, idx) => {
+                      const { displayTitle, priority } = decodePriority(
+                        int.title,
+                      );
+                      const typeBadgeClass =
+                        TYPE_BADGE_CLASSES[int.type] ??
+                        "bg-muted text-muted-foreground border-border";
+                      const priorityBadgeClass =
+                        priority !== "none"
+                          ? (PRIORITY_BADGE_CLASSES[priority] ?? "")
+                          : "";
+
+                      return (
+                        <TableRow
+                          key={int.id.toString()}
+                          data-ocid={`interactions.item.${idx + 1}`}
+                          className="hover:bg-muted/20"
+                        >
+                          <TableCell className="font-medium max-w-[180px]">
+                            <span className="truncate block">
+                              {displayTitle}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            {getClientName(int.clientId)}
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            <Badge
+                              variant="outline"
+                              className={`capitalize text-xs ${typeBadgeClass}`}
                             >
-                              <Pencil size={13} />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              data-ocid={`interactions.delete_button.${idx + 1}`}
-                              onClick={() => setDeleteId(int.id)}
-                              className="h-7 w-7 text-destructive hover:text-destructive"
-                            >
-                              <Trash2 size={13} />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                              {int.type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <StatusBadge status={int.status} />
+                          </TableCell>
+                          <TableCell className="hidden sm:table-cell">
+                            {priority !== "none" ? (
+                              <Badge
+                                variant="outline"
+                                className={`text-xs capitalize ${priorityBadgeClass}`}
+                              >
+                                {priority}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">
+                                —
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell text-muted-foreground">
+                            {int.amount !== undefined
+                              ? `₹${Number(int.amount).toLocaleString("en-IN")}`
+                              : "—"}
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell text-muted-foreground text-sm">
+                            {formatDate(int.date)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                data-ocid={`interactions.edit_button.${idx + 1}`}
+                                onClick={() => handleEditOpen(int)}
+                                className="h-7 w-7"
+                              >
+                                <Pencil size={13} />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                data-ocid={`interactions.delete_button.${idx + 1}`}
+                                onClick={() => setDeleteId(int.id)}
+                                className="h-7 w-7 text-destructive hover:text-destructive"
+                              >
+                                <Trash2 size={13} />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
@@ -516,7 +666,7 @@ export default function InteractionsPage() {
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="max-w-lg" data-ocid="interactions.add.dialog">
           <DialogHeader>
-            <DialogTitle className="font-display">Add Interaction</DialogTitle>
+            <DialogTitle className="font-display">Add PPI Entry</DialogTitle>
           </DialogHeader>
           <InteractionForm
             onSubmit={handleAdd}
@@ -532,7 +682,7 @@ export default function InteractionsPage() {
           data-ocid="interactions.edit.dialog"
         >
           <DialogHeader>
-            <DialogTitle className="font-display">Edit Interaction</DialogTitle>
+            <DialogTitle className="font-display">Edit PPI Entry</DialogTitle>
           </DialogHeader>
           <InteractionForm
             onSubmit={handleEdit}
@@ -548,7 +698,7 @@ export default function InteractionsPage() {
       >
         <AlertDialogContent data-ocid="interactions.delete.dialog">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Interaction</AlertDialogTitle>
+            <AlertDialogTitle>Delete PPI Entry</AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone.
             </AlertDialogDescription>
