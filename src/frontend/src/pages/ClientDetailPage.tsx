@@ -1,3 +1,13 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type { Principal } from "@icp-sdk/core/principal";
 import { useNavigate, useParams } from "@tanstack/react-router";
@@ -32,8 +43,11 @@ import {
   Pencil,
   Phone,
   Plus,
+  Trash2,
+  User,
+  Users,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { StatusBadge } from "../components/StatusBadge";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
@@ -45,7 +59,39 @@ import {
   useInteractions,
   useUpdateClient,
 } from "../hooks/useQueries";
+import {
+  type ClientContact,
+  decodeContacts,
+  encodeContacts,
+  genContactId,
+  stripContactsTag,
+} from "../utils/clientContacts";
 import { dateInputToNs, formatDate, todayInputStr } from "../utils/dateUtils";
+import { stripIndustryTag } from "./ClientsPage";
+
+// Dept badge color map (cycles for unknown departments)
+const DEPT_COLORS = [
+  "bg-blue-50 text-blue-700 border-blue-200",
+  "bg-emerald-50 text-emerald-700 border-emerald-200",
+  "bg-violet-50 text-violet-700 border-violet-200",
+  "bg-amber-50 text-amber-700 border-amber-200",
+  "bg-rose-50 text-rose-700 border-rose-200",
+  "bg-cyan-50 text-cyan-700 border-cyan-200",
+];
+
+const deptColorClass = (dept: string) => {
+  let hash = 0;
+  for (let i = 0; i < dept.length; i++) hash += dept.charCodeAt(i);
+  return DEPT_COLORS[hash % DEPT_COLORS.length];
+};
+
+const emptyContactForm = {
+  name: "",
+  department: "",
+  designation: "",
+  phone: "",
+  email: "",
+};
 
 export default function ClientDetailPage() {
   const { id } = useParams({ from: "/layout/clients/$id" });
@@ -58,8 +104,11 @@ export default function ClientDetailPage() {
   const updateClient = useUpdateClient();
   const createInteraction = useCreateInteraction();
 
+  // ── Edit client dialog ─────────────────────────────────────────────────────
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState<Partial<T__2>>({});
+
+  // ── Interaction dialog ─────────────────────────────────────────────────────
   const [addInteractionOpen, setAddInteractionOpen] = useState(false);
   const [intForm, setIntForm] = useState({
     type: "inquiry",
@@ -70,10 +119,26 @@ export default function ClientDetailPage() {
     date: todayInputStr(),
   });
 
+  // ── Contacts state ─────────────────────────────────────────────────────────
+  const [contacts, setContacts] = useState<ClientContact[]>([]);
+  const [addContactOpen, setAddContactOpen] = useState(false);
+  const [editContact, setEditContact] = useState<ClientContact | null>(null);
+  const [deleteContactId, setDeleteContactId] = useState<string | null>(null);
+  const [contactForm, setContactForm] = useState(emptyContactForm);
+  const [isSavingContact, setIsSavingContact] = useState(false);
+
+  // Sync contacts from client notes whenever client loads/changes
+  useEffect(() => {
+    if (client) {
+      setContacts(decodeContacts(client.notes));
+    }
+  }, [client]);
+
   const clientInteractions = (allInteractions ?? []).filter(
     (i) => i.clientId === clientId,
   );
 
+  // ── Edit client handlers ───────────────────────────────────────────────────
   const handleEditOpen = () => {
     if (!client) return;
     setEditForm({ ...client });
@@ -99,6 +164,7 @@ export default function ClientDetailPage() {
     }
   };
 
+  // ── Interaction handler ────────────────────────────────────────────────────
   const handleAddInteraction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!identity) return;
@@ -130,6 +196,103 @@ export default function ClientDetailPage() {
     }
   };
 
+  // ── Contact CRUD helpers ───────────────────────────────────────────────────
+  const saveContactsToBackend = async (
+    newContacts: ClientContact[],
+  ): Promise<void> => {
+    if (!client) return;
+    const updatedNotes = encodeContacts(client.notes, newContacts);
+    await updateClient.mutateAsync({
+      id: clientId,
+      client: {
+        ...client,
+        notes: updatedNotes,
+        updatedAt: BigInt(Date.now()) * 1_000_000n,
+      } as T__2,
+    });
+    setContacts(newContacts);
+  };
+
+  const handleAddContact = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingContact(true);
+    try {
+      const newContact: ClientContact = {
+        id: genContactId(),
+        name: contactForm.name.trim(),
+        department: contactForm.department.trim(),
+        designation: contactForm.designation.trim(),
+        phone: contactForm.phone.trim(),
+        email: contactForm.email.trim(),
+      };
+      const updated = [...contacts, newContact];
+      await saveContactsToBackend(updated);
+      toast.success("Contact added");
+      setContactForm(emptyContactForm);
+      setAddContactOpen(false);
+    } catch {
+      toast.error("Failed to add contact");
+    } finally {
+      setIsSavingContact(false);
+    }
+  };
+
+  const handleEditContactSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editContact) return;
+    setIsSavingContact(true);
+    try {
+      const updated = contacts.map((c) =>
+        c.id === editContact.id
+          ? {
+              ...c,
+              name: contactForm.name.trim(),
+              department: contactForm.department.trim(),
+              designation: contactForm.designation.trim(),
+              phone: contactForm.phone.trim(),
+              email: contactForm.email.trim(),
+            }
+          : c,
+      );
+      await saveContactsToBackend(updated);
+      toast.success("Contact updated");
+      setEditContact(null);
+      setContactForm(emptyContactForm);
+    } catch {
+      toast.error("Failed to update contact");
+    } finally {
+      setIsSavingContact(false);
+    }
+  };
+
+  const handleDeleteContact = async () => {
+    if (!deleteContactId) return;
+    setIsSavingContact(true);
+    try {
+      const updated = contacts.filter((c) => c.id !== deleteContactId);
+      await saveContactsToBackend(updated);
+      toast.success("Contact removed");
+      setDeleteContactId(null);
+    } catch {
+      toast.error("Failed to remove contact");
+    } finally {
+      setIsSavingContact(false);
+    }
+  };
+
+  // Open edit contact dialog with prefilled form
+  const openEditContact = (contact: ClientContact) => {
+    setEditContact(contact);
+    setContactForm({
+      name: contact.name,
+      department: contact.department,
+      designation: contact.designation,
+      phone: contact.phone,
+      email: contact.email,
+    });
+  };
+
+  // ── Loading / not found ────────────────────────────────────────────────────
   if (clientLoading) {
     return (
       <div className="p-6 md:p-8 space-y-6">
@@ -156,6 +319,8 @@ export default function ClientDetailPage() {
       </div>
     );
   }
+
+  const visibleNotes = stripIndustryTag(stripContactsTag(client.notes));
 
   return (
     <div className="p-6 md:p-8 space-y-6 animate-fade-in">
@@ -196,55 +361,203 @@ export default function ClientDetailPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Client Info */}
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle className="font-display text-base">
-              Contact Details
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {client.phone && (
-              <div className="flex items-center gap-3 text-sm">
-                <Phone size={14} className="text-muted-foreground shrink-0" />
-                <span>{client.phone}</span>
-              </div>
+      {/* Tabbed Layout */}
+      <Tabs defaultValue="contacts" className="w-full">
+        <TabsList className="mb-4">
+          <TabsTrigger
+            value="contacts"
+            data-ocid="client.contacts.tab"
+            className="gap-2"
+          >
+            <Users size={14} />
+            Contacts
+            {contacts.length > 0 && (
+              <Badge
+                variant="secondary"
+                className="ml-1 h-5 min-w-5 px-1 text-xs"
+              >
+                {contacts.length}
+              </Badge>
             )}
-            {client.email && (
-              <div className="flex items-center gap-3 text-sm">
-                <Mail size={14} className="text-muted-foreground shrink-0" />
-                <span className="break-all">{client.email}</span>
-              </div>
+          </TabsTrigger>
+          <TabsTrigger
+            value="interactions"
+            data-ocid="client.interactions.tab"
+            className="gap-2"
+          >
+            <MessageSquare size={14} />
+            Interactions
+            {clientInteractions.length > 0 && (
+              <Badge
+                variant="secondary"
+                className="ml-1 h-5 min-w-5 px-1 text-xs"
+              >
+                {clientInteractions.length}
+              </Badge>
             )}
-            {client.address && (
-              <div className="flex items-start gap-3 text-sm">
-                <MapPin
-                  size={14}
-                  className="text-muted-foreground shrink-0 mt-0.5"
-                />
-                <span>{client.address}</span>
-              </div>
-            )}
-            {client.notes && (
-              <div className="flex items-start gap-3 text-sm">
-                <FileText
-                  size={14}
-                  className="text-muted-foreground shrink-0 mt-0.5"
-                />
-                <span className="text-muted-foreground">{client.notes}</span>
-              </div>
-            )}
-            <div className="pt-2 border-t border-border">
-              <p className="text-xs text-muted-foreground">
-                Added {formatDate(client.createdAt)}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+          </TabsTrigger>
+        </TabsList>
 
-        {/* Interactions */}
-        <div className="lg:col-span-2 space-y-4">
+        {/* ── Contacts Tab ──────────────────────────────────────────────────── */}
+        <TabsContent value="contacts" className="space-y-4">
+          {/* Client Info Card */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="font-display text-base">
+                Client Info
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {client.phone && (
+                <div className="flex items-center gap-3 text-sm">
+                  <Phone size={14} className="text-muted-foreground shrink-0" />
+                  <span>{client.phone}</span>
+                </div>
+              )}
+              {client.email && (
+                <div className="flex items-center gap-3 text-sm">
+                  <Mail size={14} className="text-muted-foreground shrink-0" />
+                  <span className="break-all">{client.email}</span>
+                </div>
+              )}
+              {client.address && (
+                <div className="flex items-start gap-3 text-sm">
+                  <MapPin
+                    size={14}
+                    className="text-muted-foreground shrink-0 mt-0.5"
+                  />
+                  <span>{client.address}</span>
+                </div>
+              )}
+              {visibleNotes && (
+                <div className="flex items-start gap-3 text-sm">
+                  <FileText
+                    size={14}
+                    className="text-muted-foreground shrink-0 mt-0.5"
+                  />
+                  <span className="text-muted-foreground">{visibleNotes}</span>
+                </div>
+              )}
+              <div className="pt-2 border-t border-border">
+                <p className="text-xs text-muted-foreground">
+                  Added {formatDate(client.createdAt)}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Contact Persons Section */}
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-lg font-semibold text-foreground">
+              Contact Persons ({contacts.length})
+            </h2>
+            <Button
+              size="sm"
+              data-ocid="contact.add_button"
+              onClick={() => {
+                setContactForm(emptyContactForm);
+                setAddContactOpen(true);
+              }}
+              className="gap-2"
+            >
+              <Plus size={14} />
+              Add Contact
+            </Button>
+          </div>
+
+          {contacts.length === 0 ? (
+            <Card>
+              <CardContent
+                data-ocid="contact.empty_state"
+                className="py-12 text-center text-muted-foreground"
+              >
+                <User size={36} className="mx-auto mb-2 opacity-30" />
+                <p className="text-sm">
+                  No contacts yet. Add the first contact person.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {contacts.map((contact, idx) => (
+                <Card
+                  key={contact.id}
+                  data-ocid={`contact.item.${idx + 1}`}
+                  className="relative group"
+                >
+                  <CardContent className="pt-4 pb-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-2 flex-1">
+                        {/* Name + Dept */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-sm text-foreground">
+                            {contact.name}
+                          </span>
+                          {contact.department && (
+                            <Badge
+                              variant="outline"
+                              className={`text-xs ${deptColorClass(contact.department)}`}
+                            >
+                              {contact.department}
+                            </Badge>
+                          )}
+                        </div>
+
+                        {/* Designation */}
+                        {contact.designation && (
+                          <p className="text-xs text-muted-foreground">
+                            {contact.designation}
+                          </p>
+                        )}
+
+                        {/* Phone */}
+                        {contact.phone && (
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Phone size={11} />
+                            <span>{contact.phone}</span>
+                          </div>
+                        )}
+
+                        {/* Email */}
+                        {contact.email && (
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Mail size={11} />
+                            <span className="break-all">{contact.email}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          data-ocid={`contact.edit_button.${idx + 1}`}
+                          onClick={() => openEditContact(contact)}
+                        >
+                          <Pencil size={13} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          data-ocid={`contact.delete_button.${idx + 1}`}
+                          onClick={() => setDeleteContactId(contact.id)}
+                        >
+                          <Trash2 size={13} />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── Interactions Tab ──────────────────────────────────────────────── */}
+        <TabsContent value="interactions" className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-display text-lg font-semibold text-foreground">
               Interactions ({clientInteractions.length})
@@ -312,10 +625,10 @@ export default function ClientDetailPage() {
               ))}
             </div>
           )}
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
 
-      {/* Edit Dialog */}
+      {/* ── Edit Client Dialog ─────────────────────────────────────────────── */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-lg" data-ocid="client.edit.dialog">
           <DialogHeader>
@@ -414,7 +727,7 @@ export default function ClientDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Add Interaction Dialog */}
+      {/* ── Add Interaction Dialog ─────────────────────────────────────────── */}
       <Dialog open={addInteractionOpen} onOpenChange={setAddInteractionOpen}>
         <DialogContent className="max-w-lg" data-ocid="interaction.add.dialog">
           <DialogHeader>
@@ -534,6 +847,262 @@ export default function ClientDetailPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* ── Add Contact Dialog ─────────────────────────────────────────────── */}
+      <Dialog
+        open={addContactOpen}
+        onOpenChange={(o) => {
+          setAddContactOpen(o);
+          if (!o) setContactForm(emptyContactForm);
+        }}
+      >
+        <DialogContent className="max-w-lg" data-ocid="contact.add.dialog">
+          <DialogHeader>
+            <DialogTitle className="font-display">
+              Add Contact Person
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleAddContact} className="space-y-4 mt-2">
+            <div className="space-y-1.5">
+              <Label>Name *</Label>
+              <Input
+                data-ocid="contact.name.input"
+                value={contactForm.name}
+                onChange={(e) =>
+                  setContactForm((p) => ({ ...p, name: e.target.value }))
+                }
+                placeholder="Full name"
+                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Department *</Label>
+                <Input
+                  data-ocid="contact.department.input"
+                  value={contactForm.department}
+                  onChange={(e) =>
+                    setContactForm((p) => ({
+                      ...p,
+                      department: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g. Purchase, Maintenance"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Designation</Label>
+                <Input
+                  data-ocid="contact.designation.input"
+                  value={contactForm.designation}
+                  onChange={(e) =>
+                    setContactForm((p) => ({
+                      ...p,
+                      designation: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g. Manager"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Phone</Label>
+                <Input
+                  data-ocid="contact.phone.input"
+                  value={contactForm.phone}
+                  onChange={(e) =>
+                    setContactForm((p) => ({ ...p, phone: e.target.value }))
+                  }
+                  placeholder="Mobile number"
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Email</Label>
+                <Input
+                  data-ocid="contact.email.input"
+                  type="email"
+                  value={contactForm.email}
+                  onChange={(e) =>
+                    setContactForm((p) => ({ ...p, email: e.target.value }))
+                  }
+                  placeholder="email@company.com"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                data-ocid="contact.add.cancel_button"
+                onClick={() => {
+                  setAddContactOpen(false);
+                  setContactForm(emptyContactForm);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                data-ocid="contact.add.save_button"
+                disabled={isSavingContact}
+              >
+                {isSavingContact ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Add Contact
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit Contact Dialog ────────────────────────────────────────────── */}
+      <Dialog
+        open={editContact !== null}
+        onOpenChange={(o) => {
+          if (!o) {
+            setEditContact(null);
+            setContactForm(emptyContactForm);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg" data-ocid="contact.edit.dialog">
+          <DialogHeader>
+            <DialogTitle className="font-display">
+              Edit Contact Person
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleEditContactSave} className="space-y-4 mt-2">
+            <div className="space-y-1.5">
+              <Label>Name *</Label>
+              <Input
+                data-ocid="contact.edit.name.input"
+                value={contactForm.name}
+                onChange={(e) =>
+                  setContactForm((p) => ({ ...p, name: e.target.value }))
+                }
+                placeholder="Full name"
+                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Department *</Label>
+                <Input
+                  data-ocid="contact.edit.department.input"
+                  value={contactForm.department}
+                  onChange={(e) =>
+                    setContactForm((p) => ({
+                      ...p,
+                      department: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g. Purchase, Maintenance"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Designation</Label>
+                <Input
+                  data-ocid="contact.edit.designation.input"
+                  value={contactForm.designation}
+                  onChange={(e) =>
+                    setContactForm((p) => ({
+                      ...p,
+                      designation: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g. Manager"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Phone</Label>
+                <Input
+                  data-ocid="contact.edit.phone.input"
+                  value={contactForm.phone}
+                  onChange={(e) =>
+                    setContactForm((p) => ({ ...p, phone: e.target.value }))
+                  }
+                  placeholder="Mobile number"
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Email</Label>
+                <Input
+                  data-ocid="contact.edit.email.input"
+                  type="email"
+                  value={contactForm.email}
+                  onChange={(e) =>
+                    setContactForm((p) => ({ ...p, email: e.target.value }))
+                  }
+                  placeholder="email@company.com"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                data-ocid="contact.edit.cancel_button"
+                onClick={() => {
+                  setEditContact(null);
+                  setContactForm(emptyContactForm);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                data-ocid="contact.edit.save_button"
+                disabled={isSavingContact}
+              >
+                {isSavingContact ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete Contact AlertDialog ─────────────────────────────────────── */}
+      <AlertDialog
+        open={deleteContactId !== null}
+        onOpenChange={(o) => !o && setDeleteContactId(null)}
+      >
+        <AlertDialogContent data-ocid="contact.delete.dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Contact</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove this contact person? This cannot
+              be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-ocid="contact.delete.cancel_button">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              data-ocid="contact.delete.confirm_button"
+              onClick={handleDeleteContact}
+              className="bg-destructive hover:bg-destructive/90"
+              disabled={isSavingContact}
+            >
+              {isSavingContact ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -1,54 +1,30 @@
 # Polypick Field Service App
 
 ## Current State
-Full-stack app with: Internet Identity login, Clients directory, PPI pipeline (Inquiry/Offer/Order), TA DA Claims, Visit Planner, Marketing Report, Reports, Staff management, Role-based access (Admin/Manager/Marketing/Service).
-
-Backend has: createClient, getAllClients, createInteraction, getAllInteractions, createVisitLog, getAllVisits, submitClaim, getAllClaims, approveClaim, rejectClaim, user profiles, role management.
-
-No Daily Report feature exists. No pre-loaded client data exists.
+Full-stack app with Motoko backend and React frontend. Client module has basic fields: name, company, phone, email, address, notes, industry (encoded in notes). ClientDetailPage shows contact details and interactions. No support for multiple contacts per client or department tracking.
 
 ## Requested Changes (Diff)
 
 ### Add
-1. **Daily Report Page** (`/daily-report`) -- A form where staff can submit a daily field report. Fields:
-   - Report Date (date picker, defaults to today)
-   - Staff Name (auto-filled from profile)
-   - Report Text (large textarea -- free-form, multi-line, like the sample report pasted by user)
-   - Linked Clients (multi-select from existing clients list -- optional)
-   - Next Action / Pending Items (textarea)
-   - Submit button
-
-2. **Daily Report List for Admin/Manager** -- On the Daily Report page, admins/managers see all submitted reports from all staff in a list, grouped by date. Staff see only their own reports.
-
-3. **Daily Report route** -- Add `/daily-report` route to routeTree.tsx
-
-4. **Navigation link** -- Add "Daily Report" link to sidebar/nav
-
-5. **Pre-seeded client data** -- On the ClientsPage, add a "Seed Sample Clients" button (visible only when client list is empty) that bulk-adds all 12 clients from Raju Singh's report:
-   - BRPL Barbil (Steel Plant, Barbil)
-   - PPL Pradeep (Steel Plant, Pradeep)
-   - Jagnnath Steel RSP Rourkela (Steel Plant, Rourkela)
-   - Rashmi Metallic Unit 1 (Steel Plant, Khargpur)
-   - JSL Jajpur (Steel Plant, Jajpur)
-   - Shyam Metallic (Steel Plant, Khargpur)
-   - IMFA Steel (Steel Plant, Jajpur)
-   - Gerawa Steel (Steel Plant, Barbil)
-   - Bengal Energy (Power Plant, Khargpur)
-   - Rungta Kalyani (Mining, Kalyani)
-   - Vedanta Bhadrak (Steel Plant, Bhadrak)
-   - MECON Dhanbad (Other, Dhanbad)
+- **Multiple Contacts per Client**: Each client can have multiple contact persons, each with: Name, Phone, Email, Designation, Department (free text, manually entered)
+- **Contacts Tab in ClientDetailPage**: A dedicated "Contacts" tab alongside "Interactions" in the client detail view
+- **Add/Edit/Delete Contact UI**: Form to add new contacts, edit existing, and remove them
+- **Contact storage**: Contacts stored as JSON in the client's `notes` field (encoded alongside existing industry tag), since backend schema cannot be changed
 
 ### Modify
-- `routeTree.tsx` -- Add DailyReportPage route
-- `RootLayout` sidebar/nav -- Add Daily Report nav link
-- `ClientsPage` -- Add "Add Sample Clients" bulk-seed button (only when list is empty)
+- **ClientDetailPage**: Add tabbed layout -- "Contacts" tab and "Interactions" tab. Contacts tab shows all contacts for this client with add/edit/delete actions.
+- **ClientsPage**: Show contact count badge on client rows (e.g. "3 contacts")
 
 ### Remove
 - Nothing removed
 
 ## Implementation Plan
-1. Create `DailyReportPage.tsx` -- form for submitting reports + list of reports (stored in localStorage since no backend schema for reports, using `notes` field encoding or local state; use localStorage keyed by user principal for persistence)
-2. Add route `/daily-report` to `routeTree.tsx`
-3. Add nav link in `RootLayout`
-4. Add "Add Sample Clients" button in `ClientsPage` that calls `createClient` for each of the 12 clients in sequence
-5. Validate and build
+1. Create a `clientContacts` utility module (`src/utils/clientContacts.ts`) to encode/decode contact list JSON in the client's notes field (alongside `[IND:...]` tag)
+2. Update `ClientDetailPage.tsx`:
+   - Add tabs (Contacts / Interactions)
+   - Contacts tab: list all contacts with name, department, designation, phone, email
+   - Add Contact dialog: fields for name, department (free text), designation, phone, email
+   - Edit Contact inline or via dialog
+   - Delete Contact with confirmation
+3. Update `ClientsPage.tsx`: show contact count in table rows
+4. Validate and deploy

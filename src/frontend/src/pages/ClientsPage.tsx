@@ -58,6 +58,7 @@ import {
   useCreateClient,
   useDeleteClient,
 } from "../hooks/useQueries";
+import { decodeContacts } from "../utils/clientContacts";
 
 // ── Industry type helpers ─────────────────────────────────────────────────────
 
@@ -600,7 +601,23 @@ export default function ClientsPage() {
                       navigate({ to: `/clients/${client.id.toString()}` })
                     }
                   >
-                    <TableCell className="font-medium">{client.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <span className="flex items-center gap-1.5">
+                        {client.name}
+                        {(() => {
+                          const cnt = decodeContacts(client.notes).length;
+                          return cnt > 0 ? (
+                            <Badge
+                              variant="secondary"
+                              className="text-xs px-1.5 py-0 h-4 font-normal"
+                              title={`${cnt} contact${cnt !== 1 ? "s" : ""}`}
+                            >
+                              👥 {cnt}
+                            </Badge>
+                          ) : null;
+                        })()}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">
                       {client.company}
                     </TableCell>
