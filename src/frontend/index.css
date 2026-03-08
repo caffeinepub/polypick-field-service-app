@@ -1,0 +1,215 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: "Cabinet Grotesk";
+  src: url("/assets/fonts/CabinetGrotesk-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Satoshi";
+  src: url("/assets/fonts/Satoshi-Variable.woff2") format("woff2");
+  font-weight: 300 900;
+  font-display: swap;
+  font-style: normal;
+}
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+
+    /* Navy + Amber enterprise palette */
+    --background: 0.97 0.005 255;
+    --foreground: 0.16 0.025 255;
+
+    --card: 1 0 0;
+    --card-foreground: 0.16 0.025 255;
+
+    --popover: 1 0 0;
+    --popover-foreground: 0.16 0.025 255;
+
+    /* Primary: deep navy */
+    --primary: 0.26 0.065 265;
+    --primary-foreground: 0.98 0 0;
+
+    /* Secondary: light slate */
+    --secondary: 0.93 0.01 255;
+    --secondary-foreground: 0.26 0.065 265;
+
+    --muted: 0.94 0.008 255;
+    --muted-foreground: 0.52 0.025 255;
+
+    /* Accent: amber/gold */
+    --accent: 0.88 0.06 85;
+    --accent-foreground: 0.18 0.04 60;
+
+    --destructive: 0.58 0.22 25;
+    --destructive-foreground: 0.98 0 0;
+
+    --border: 0.88 0.01 255;
+    --input: 0.88 0.01 255;
+    --ring: 0.26 0.065 265;
+
+    /* Charts */
+    --chart-1: 0.55 0.18 265;
+    --chart-2: 0.72 0.15 155;
+    --chart-3: 0.75 0.17 85;
+    --chart-4: 0.62 0.20 30;
+    --chart-5: 0.48 0.16 310;
+
+    /* Sidebar: deep navy */
+    --sidebar: 0.22 0.055 265;
+    --sidebar-foreground: 0.92 0.01 255;
+    --sidebar-primary: 0.78 0.14 85;
+    --sidebar-primary-foreground: 0.15 0.04 60;
+    --sidebar-accent: 0.30 0.06 265;
+    --sidebar-accent-foreground: 0.92 0.01 255;
+    --sidebar-border: 0.32 0.05 265;
+    --sidebar-ring: 0.78 0.14 85;
+
+    /* Status colors */
+    --status-pending: 0.80 0.15 85;
+    --status-approved: 0.65 0.15 155;
+    --status-rejected: 0.58 0.22 25;
+    --status-planned: 0.55 0.18 240;
+    --status-completed: 0.65 0.15 155;
+    --status-cancelled: 0.55 0.02 255;
+    --status-open: 0.55 0.18 265;
+    --status-inprogress: 0.72 0.14 50;
+    --status-won: 0.65 0.15 155;
+    --status-lost: 0.58 0.22 25;
+    --status-closed: 0.55 0.02 255;
+  }
+
+  .dark {
+    --background: 0.14 0.03 265;
+    --foreground: 0.93 0.01 255;
+
+    --card: 0.19 0.04 265;
+    --card-foreground: 0.93 0.01 255;
+
+    --popover: 0.22 0.04 265;
+    --popover-foreground: 0.93 0.01 255;
+
+    --primary: 0.78 0.14 85;
+    --primary-foreground: 0.15 0.04 60;
+
+    --secondary: 0.25 0.05 265;
+    --secondary-foreground: 0.93 0.01 255;
+
+    --muted: 0.25 0.04 265;
+    --muted-foreground: 0.62 0.03 255;
+
+    --accent: 0.78 0.14 85;
+    --accent-foreground: 0.15 0.04 60;
+
+    --destructive: 0.65 0.22 25;
+    --destructive-foreground: 0.98 0 0;
+
+    --border: 0.30 0.04 265;
+    --input: 0.30 0.04 265;
+    --ring: 0.78 0.14 85;
+
+    --chart-1: 0.65 0.18 265;
+    --chart-2: 0.72 0.15 155;
+    --chart-3: 0.80 0.17 85;
+    --chart-4: 0.68 0.20 30;
+    --chart-5: 0.58 0.16 310;
+
+    --sidebar: 0.17 0.04 265;
+    --sidebar-foreground: 0.92 0.01 255;
+    --sidebar-primary: 0.78 0.14 85;
+    --sidebar-primary-foreground: 0.15 0.04 60;
+    --sidebar-accent: 0.24 0.05 265;
+    --sidebar-accent-foreground: 0.92 0.01 255;
+    --sidebar-border: 0.26 0.04 265;
+    --sidebar-ring: 0.78 0.14 85;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Satoshi", system-ui, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "Cabinet Grotesk", system-ui, sans-serif;
+    font-weight: 700;
+  }
+}
+
+@layer utilities {
+  .sidebar-nav-item {
+    @apply flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors;
+  }
+  .sidebar-nav-item:hover {
+    @apply bg-sidebar-accent text-sidebar-accent-foreground;
+  }
+  .sidebar-nav-item.active {
+    @apply bg-sidebar-primary text-sidebar-primary-foreground;
+  }
+
+  .status-badge-pending {
+    background-color: oklch(0.95 0.06 85);
+    color: oklch(0.40 0.12 70);
+    border-color: oklch(0.85 0.10 85);
+  }
+  .status-badge-approved {
+    background-color: oklch(0.93 0.06 155);
+    color: oklch(0.35 0.12 155);
+    border-color: oklch(0.80 0.10 155);
+  }
+  .status-badge-rejected {
+    background-color: oklch(0.94 0.06 25);
+    color: oklch(0.40 0.18 25);
+    border-color: oklch(0.82 0.10 25);
+  }
+  .status-badge-planned {
+    background-color: oklch(0.92 0.06 240);
+    color: oklch(0.35 0.15 240);
+    border-color: oklch(0.80 0.10 240);
+  }
+  .status-badge-completed {
+    background-color: oklch(0.93 0.06 155);
+    color: oklch(0.35 0.12 155);
+    border-color: oklch(0.80 0.10 155);
+  }
+  .status-badge-cancelled {
+    background-color: oklch(0.92 0.01 255);
+    color: oklch(0.42 0.02 255);
+    border-color: oklch(0.82 0.01 255);
+  }
+  .status-badge-open {
+    background-color: oklch(0.92 0.06 265);
+    color: oklch(0.35 0.15 265);
+    border-color: oklch(0.80 0.10 265);
+  }
+  .status-badge-inprogress {
+    background-color: oklch(0.95 0.07 50);
+    color: oklch(0.42 0.14 50);
+    border-color: oklch(0.85 0.10 50);
+  }
+  .status-badge-won {
+    background-color: oklch(0.93 0.06 155);
+    color: oklch(0.35 0.12 155);
+    border-color: oklch(0.80 0.10 155);
+  }
+  .status-badge-lost {
+    background-color: oklch(0.94 0.06 25);
+    color: oklch(0.40 0.18 25);
+    border-color: oklch(0.82 0.10 25);
+  }
+  .status-badge-closed {
+    background-color: oklch(0.92 0.01 255);
+    color: oklch(0.42 0.02 255);
+    border-color: oklch(0.82 0.01 255);
+  }
+}
