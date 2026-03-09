@@ -1,23 +1,58 @@
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Briefcase,
   CalendarDays,
+  Camera,
   LogOut,
   Mail,
   Shield,
   User,
 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useIsAdmin, useUserProfile } from "../hooks/useQueries";
+import {
+  compressImage,
+  getProfilePhoto,
+  saveProfilePhoto,
+} from "../utils/profilePhoto";
 
 export default function ProfilePage() {
   const { identity, clear } = useInternetIdentity();
   const { data: profile } = useUserProfile();
   const { data: isAdmin } = useIsAdmin();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const principal = identity?.getPrincipal().toString() ?? "";
+
+  const [photoSrc, setPhotoSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (principal) {
+      setPhotoSrc(getProfilePhoto(principal));
+    }
+  }, [principal]);
+
+  const handlePhotoChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file || !principal) return;
+      try {
+        const compressed = await compressImage(file);
+        saveProfilePhoto(principal, compressed);
+        setPhotoSrc(compressed);
+        toast.success("Profile photo updated!");
+      } catch {
+        toast.error("Could not process the photo. Please try another image.");
+      }
+      e.target.value = "";
+    },
+    [principal],
+  );
+
   const createdAt = profile?.createdAt
     ? new Date(Number(profile.createdAt / 1_000_000n)).toLocaleDateString(
         "en-IN",
@@ -40,11 +75,38 @@ export default function ProfilePage() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex items-center gap-4">
-            <Avatar className="h-16 w-16">
-              <AvatarFallback className="text-2xl font-bold bg-primary/10 text-primary">
-                {profile?.name?.charAt(0)?.toUpperCase() ?? "U"}
-              </AvatarFallback>
-            </Avatar>
+            {/* Avatar with edit overlay */}
+            <div className="relative flex-shrink-0">
+              <Avatar className="h-16 w-16">
+                {photoSrc && (
+                  <AvatarImage
+                    src={photoSrc}
+                    alt={profile?.name ?? "Profile"}
+                    className="object-cover"
+                  />
+                )}
+                <AvatarFallback className="text-2xl font-bold bg-primary/10 text-primary">
+                  {profile?.name?.charAt(0)?.toUpperCase() ?? "U"}
+                </AvatarFallback>
+              </Avatar>
+              {/* Edit photo button */}
+              <button
+                type="button"
+                aria-label="Change profile photo"
+                data-ocid="profile.upload_button"
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute -bottom-1 -right-1 h-6 w-6 bg-primary rounded-full flex items-center justify-center shadow hover:bg-primary/80 focus:outline-none focus:ring-2 focus:ring-primary transition-colors cursor-pointer"
+              >
+                <Camera size={11} className="text-primary-foreground" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoChange}
+              />
+            </div>
             <div>
               <h2 className="font-display text-xl font-bold text-foreground">
                 {profile?.name ?? "—"}
@@ -52,6 +114,9 @@ export default function ProfilePage() {
               <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
                 <Shield size={13} />
                 {isAdmin ? "Administrator" : "Field Staff"}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Tap camera icon to change photo
               </p>
             </div>
           </div>

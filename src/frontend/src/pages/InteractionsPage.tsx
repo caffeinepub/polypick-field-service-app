@@ -40,6 +40,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type { Principal } from "@icp-sdk/core/principal";
 import {
+  FileDown,
   GitBranch,
   Loader2,
   Pencil,
@@ -69,6 +70,87 @@ import {
 } from "../utils/dateUtils";
 
 const TYPES = ["all", "inquiry", "offer", "order", "service", "payment"];
+
+// ── PDF print helper ─────────────────────────────────────────────────────────
+
+function printInteractionsPDF(
+  interactions: T__1[],
+  getClientName: (id: bigint) => string,
+) {
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) return;
+  const date = new Date().toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+  const rows = interactions
+    .map((int) => {
+      const { displayTitle, priority } = decodePriority(int.title);
+      const intDate = new Date(
+        Number(int.date / 1_000_000n),
+      ).toLocaleDateString("en-IN");
+      const amount =
+        int.amount !== undefined
+          ? `₹${Number(int.amount).toLocaleString("en-IN")}`
+          : "—";
+      return `
+      <tr>
+        <td>${displayTitle}</td>
+        <td>${getClientName(int.clientId)}</td>
+        <td style="text-transform:capitalize">${int.type}</td>
+        <td style="text-transform:capitalize">${int.status}</td>
+        <td style="text-transform:capitalize">${priority !== "none" ? priority : "—"}</td>
+        <td>${amount}</td>
+        <td>${intDate}</td>
+      </tr>`;
+    })
+    .join("");
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>PPI Pipeline Report – Polypick Engineers Pvt Ltd</title>
+      <style>
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; color: #111; font-size: 12px; }
+        .header { text-align: center; border-bottom: 2px solid #222; padding-bottom: 12px; margin-bottom: 20px; }
+        .header h1 { margin: 0; font-size: 20px; }
+        .header p { margin: 3px 0; color: #555; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #f0f0f0; padding: 8px 6px; text-align: left; font-size: 11px; border: 1px solid #ccc; }
+        td { padding: 7px 6px; border: 1px solid #ddd; }
+        tr:nth-child(even) td { background: #fafafa; }
+        @media print { body { margin: 10px; } }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>Polypick Engineers Pvt Ltd</h1>
+        <p>PPI Pipeline Report</p>
+        <p>Generated: ${date} &nbsp;|&nbsp; Total Entries: ${interactions.length}</p>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Client</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Priority</th>
+            <th>Amount</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+}
 
 // ── Priority helpers ─────────────────────────────────────────────────────────
 const PRIORITY_PREFIX_REGEX = /^\[P:(HIGH|MEDIUM|LOW)\]\s*/;
@@ -412,17 +494,31 @@ export default function InteractionsPage() {
             Track inquiries, offers, orders, services &amp; payments
           </p>
         </div>
-        <Button
-          data-ocid="interactions.add_button"
-          onClick={() => {
-            setForm(emptyForm);
-            setAddOpen(true);
-          }}
-          className="gap-2"
-        >
-          <Plus size={16} />
-          Add PPI Entry
-        </Button>
+        <div className="flex items-center gap-2">
+          {filtered.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              data-ocid="interactions.pdf.button"
+              onClick={() => printInteractionsPDF(filtered, getClientName)}
+              className="gap-2"
+            >
+              <FileDown size={15} />
+              Export PDF
+            </Button>
+          )}
+          <Button
+            data-ocid="interactions.add_button"
+            onClick={() => {
+              setForm(emptyForm);
+              setAddOpen(true);
+            }}
+            className="gap-2"
+          >
+            <Plus size={16} />
+            Add PPI Entry
+          </Button>
+        </div>
       </div>
 
       {/* Pipeline Summary */}

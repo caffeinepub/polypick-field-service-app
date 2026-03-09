@@ -9,20 +9,36 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useNavigate } from "@tanstack/react-router";
-import { Briefcase, Loader2, Phone, User } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Briefcase, Camera, Loader2, Phone, User } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useSaveProfile, useUserProfile } from "../hooks/useQueries";
+import { compressImage, saveProfilePhoto } from "../utils/profilePhoto";
 
 export default function ProfileSetupPage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [department, setDepartment] = useState("none");
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { identity, isInitializing } = useInternetIdentity();
   const { data: profile, isLoading } = useUserProfile();
   const saveProfile = useSaveProfile();
+
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await compressImage(file);
+      setPhotoPreview(compressed);
+    } catch {
+      toast.error("Could not process the photo. Please try another image.");
+    }
+    // Reset input so same file can be re-selected
+    e.target.value = "";
+  };
 
   useEffect(() => {
     if (!isInitializing && !identity) {
@@ -46,6 +62,11 @@ export default function ProfileSetupPage() {
         name: name.trim(),
         createdAt: BigInt(Date.now()) * 1_000_000n,
       });
+      // Save photo to localStorage after profile is saved
+      const principal = identity?.getPrincipal().toString() ?? "";
+      if (photoPreview && principal) {
+        saveProfilePhoto(principal, photoPreview);
+      }
       toast.success("Profile saved! Welcome to Polypick Field Service.");
       navigate({ to: "/" });
     } catch {
@@ -65,11 +86,46 @@ export default function ProfileSetupPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-8">
       <div className="w-full max-w-sm space-y-8 animate-fade-in">
         <div className="text-center">
+          {/* Profile photo picker */}
           <div className="flex justify-center mb-4">
-            <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
-              <User size={32} className="text-primary" />
-            </div>
+            <button
+              type="button"
+              aria-label="Upload profile photo"
+              data-ocid="profile.upload_button"
+              onClick={() => fileInputRef.current?.click()}
+              className="relative h-20 w-20 rounded-full overflow-hidden ring-2 ring-border hover:ring-primary focus:outline-none focus:ring-primary transition-all group cursor-pointer"
+            >
+              {photoPreview ? (
+                <img
+                  src={photoPreview}
+                  alt="Profile preview"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="h-full w-full bg-primary/10 flex items-center justify-center">
+                  <User size={32} className="text-primary" />
+                </div>
+              )}
+              {/* Camera overlay */}
+              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <Camera size={20} className="text-white" />
+              </div>
+              {/* Always-visible camera badge */}
+              <div className="absolute bottom-0 right-0 h-6 w-6 bg-primary rounded-full flex items-center justify-center shadow">
+                <Camera size={12} className="text-primary-foreground" />
+              </div>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handlePhotoChange}
+            />
           </div>
+          <p className="text-xs text-muted-foreground mb-1">
+            Tap to add photo (optional)
+          </p>
           <h1 className="font-display text-2xl font-bold text-foreground">
             Set up your profile
           </h1>

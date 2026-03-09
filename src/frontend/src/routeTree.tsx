@@ -1,18 +1,49 @@
+import { Skeleton } from "@/components/ui/skeleton";
 import { Outlet, createRootRoute, createRoute } from "@tanstack/react-router";
+import { Suspense, lazy } from "react";
 import RootLayout from "./layouts/RootLayout";
-import ClientDetailPage from "./pages/ClientDetailPage";
-import ClientsPage from "./pages/ClientsPage";
-import DailyReportPage from "./pages/DailyReportPage";
+
 import DashboardPage from "./pages/DashboardPage";
-import InteractionsPage from "./pages/InteractionsPage";
+// Eagerly loaded (always needed on first render)
 import LoginPage from "./pages/LoginPage";
-import MarketingReportPage from "./pages/MarketingReportPage";
-import ProfilePage from "./pages/ProfilePage";
 import ProfileSetupPage from "./pages/ProfileSetupPage";
-import ReportsPage from "./pages/ReportsPage";
-import StaffPage from "./pages/StaffPage";
-import TaDaPage from "./pages/TaDaPage";
-import VisitsPage from "./pages/VisitsPage";
+
+// Lazily loaded — only fetched when navigated to
+const ClientsPage = lazy(() => import("./pages/ClientsPage"));
+const ClientDetailPage = lazy(() => import("./pages/ClientDetailPage"));
+const InteractionsPage = lazy(() => import("./pages/InteractionsPage"));
+const TaDaPage = lazy(() => import("./pages/TaDaPage"));
+const VisitsPage = lazy(() => import("./pages/VisitsPage"));
+const ReportsPage = lazy(() => import("./pages/ReportsPage"));
+const StaffPage = lazy(() => import("./pages/StaffPage"));
+const MarketingReportPage = lazy(() => import("./pages/MarketingReportPage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const DailyReportPage = lazy(() => import("./pages/DailyReportPage"));
+
+function PageLoader() {
+  return (
+    <div className="p-6 space-y-4">
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-4 w-3/4" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mt-6">
+        {[1, 2, 3, 4].map((i) => (
+          <Skeleton key={i} className="h-28 w-full rounded-xl" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function withSuspense(Component: React.ComponentType) {
+  return function SuspenseWrapped() {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <Component />
+      </Suspense>
+    );
+  };
+}
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -45,61 +76,61 @@ const dashboardRoute = createRoute({
 const clientsRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: "/clients",
-  component: ClientsPage,
+  component: withSuspense(ClientsPage),
 });
 
 const clientDetailRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: "/clients/$id",
-  component: ClientDetailPage,
+  component: withSuspense(ClientDetailPage),
 });
 
 const interactionsRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: "/interactions",
-  component: InteractionsPage,
+  component: withSuspense(InteractionsPage),
 });
 
 const tadaRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: "/tada",
-  component: TaDaPage,
+  component: withSuspense(TaDaPage),
 });
 
 const visitsRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: "/visits",
-  component: VisitsPage,
+  component: withSuspense(VisitsPage),
 });
 
 const reportsRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: "/reports",
-  component: ReportsPage,
+  component: withSuspense(ReportsPage),
 });
 
 const staffRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: "/staff",
-  component: StaffPage,
+  component: withSuspense(StaffPage),
 });
 
 const marketingReportRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: "/marketing-report",
-  component: MarketingReportPage,
+  component: withSuspense(MarketingReportPage),
 });
 
 const profileRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: "/profile",
-  component: ProfilePage,
+  component: withSuspense(ProfilePage),
 });
 
 const dailyReportRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: "/daily-report",
-  component: DailyReportPage,
+  component: withSuspense(DailyReportPage),
 });
 
 export const routeTree = rootRoute.addChildren([

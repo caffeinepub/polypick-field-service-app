@@ -43,6 +43,7 @@ import {
   Pencil,
   Phone,
   Plus,
+  Smartphone,
   Trash2,
   User,
   Users,
@@ -85,10 +86,21 @@ const deptColorClass = (dept: string) => {
   return DEPT_COLORS[hash % DEPT_COLORS.length];
 };
 
+const SENIORITY_OPTIONS = ["Senior", "Junior", "Manager", "Director", "Other"];
+
+const SENIORITY_BADGE_CLASSES: Record<string, string> = {
+  Senior: "bg-green-50 text-green-700 border-green-200",
+  Manager: "bg-purple-50 text-purple-700 border-purple-200",
+  Director: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  Junior: "bg-orange-50 text-orange-700 border-orange-200",
+  Other: "bg-muted text-muted-foreground border-border",
+};
+
 const emptyContactForm = {
   name: "",
   department: "",
   designation: "",
+  seniority: "",
   phone: "",
   email: "",
 };
@@ -126,6 +138,19 @@ export default function ClientDetailPage() {
   const [deleteContactId, setDeleteContactId] = useState<string | null>(null);
   const [contactForm, setContactForm] = useState(emptyContactForm);
   const [isSavingContact, setIsSavingContact] = useState(false);
+
+  // ── Phone import state ─────────────────────────────────────────────────────
+  const [phoneImportOpen, setPhoneImportOpen] = useState(false);
+  const [stagedPhoneContacts, setStagedPhoneContacts] = useState<
+    Array<{
+      tempId: string;
+      name: string;
+      phone: string;
+      email: string;
+      department: string;
+      seniority: string;
+    }>
+  >([]);
 
   // Sync contacts from client notes whenever client loads/changes
   useEffect(() => {
@@ -222,6 +247,7 @@ export default function ClientDetailPage() {
         name: contactForm.name.trim(),
         department: contactForm.department.trim(),
         designation: contactForm.designation.trim(),
+        seniority: contactForm.seniority.trim(),
         phone: contactForm.phone.trim(),
         email: contactForm.email.trim(),
       };
@@ -249,6 +275,7 @@ export default function ClientDetailPage() {
               name: contactForm.name.trim(),
               department: contactForm.department.trim(),
               designation: contactForm.designation.trim(),
+              seniority: contactForm.seniority.trim(),
               phone: contactForm.phone.trim(),
               email: contactForm.email.trim(),
             }
@@ -287,9 +314,78 @@ export default function ClientDetailPage() {
       name: contact.name,
       department: contact.department,
       designation: contact.designation,
+      seniority: contact.seniority ?? "",
       phone: contact.phone,
       email: contact.email,
     });
+  };
+
+  // ── Phone import handler ───────────────────────────────────────────────────
+  const handleImportFromPhone = async () => {
+    if (
+      !("contacts" in navigator) ||
+      !(navigator as unknown as { contacts: unknown }).contacts
+    ) {
+      toast.error(
+        "Phone contact import is only available on supported mobile browsers (Chrome on Android, Safari on iOS)",
+      );
+      return;
+    }
+    try {
+      const props = ["name", "tel", "email"];
+      const navContacts = (
+        navigator as unknown as {
+          contacts: {
+            select: (
+              props: string[],
+              opts: { multiple: boolean },
+            ) => Promise<
+              Array<{ name?: string[]; tel?: string[]; email?: string[] }>
+            >;
+          };
+        }
+      ).contacts;
+      const selected = await navContacts.select(props, { multiple: true });
+      if (!selected || selected.length === 0) return;
+      const staged = selected.map((c) => ({
+        tempId: genContactId(),
+        name: (c.name?.[0] ?? "").trim(),
+        phone: (c.tel?.[0] ?? "").trim(),
+        email: (c.email?.[0] ?? "").trim(),
+        department: "",
+        seniority: "",
+      }));
+      setStagedPhoneContacts(staged);
+      setPhoneImportOpen(true);
+    } catch {
+      toast.error("Could not access contacts");
+    }
+  };
+
+  const handlePhoneImportConfirm = async () => {
+    setIsSavingContact(true);
+    try {
+      const newContacts: ClientContact[] = stagedPhoneContacts.map((c) => ({
+        id: genContactId(),
+        name: c.name,
+        department: c.department,
+        designation: "",
+        seniority: c.seniority,
+        phone: c.phone,
+        email: c.email,
+      }));
+      const updated = [...contacts, ...newContacts];
+      await saveContactsToBackend(updated);
+      toast.success(
+        `${newContacts.length} contact${newContacts.length !== 1 ? "s" : ""} imported!`,
+      );
+      setPhoneImportOpen(false);
+      setStagedPhoneContacts([]);
+    } catch {
+      toast.error("Failed to import contacts");
+    } finally {
+      setIsSavingContact(false);
+    }
   };
 
   // ── Loading / not found ────────────────────────────────────────────────────
@@ -447,22 +543,34 @@ export default function ClientDetailPage() {
           </Card>
 
           {/* Contact Persons Section */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <h2 className="font-display text-lg font-semibold text-foreground">
               Contact Persons ({contacts.length})
             </h2>
-            <Button
-              size="sm"
-              data-ocid="contact.add_button"
-              onClick={() => {
-                setContactForm(emptyContactForm);
-                setAddContactOpen(true);
-              }}
-              className="gap-2"
-            >
-              <Plus size={14} />
-              Add Contact
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                data-ocid="contact.import_phone.button"
+                onClick={handleImportFromPhone}
+                className="gap-2"
+              >
+                <Smartphone size={14} />
+                Import from Phone
+              </Button>
+              <Button
+                size="sm"
+                data-ocid="contact.add_button"
+                onClick={() => {
+                  setContactForm(emptyContactForm);
+                  setAddContactOpen(true);
+                }}
+                className="gap-2"
+              >
+                <Plus size={14} />
+                Add Contact
+              </Button>
+            </div>
           </div>
 
           {contacts.length === 0 ? (
@@ -503,12 +611,22 @@ export default function ClientDetailPage() {
                           )}
                         </div>
 
-                        {/* Designation */}
-                        {contact.designation && (
-                          <p className="text-xs text-muted-foreground">
-                            {contact.designation}
-                          </p>
-                        )}
+                        {/* Designation + Seniority */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {contact.designation && (
+                            <p className="text-xs text-muted-foreground">
+                              {contact.designation}
+                            </p>
+                          )}
+                          {contact.seniority && (
+                            <Badge
+                              variant="outline"
+                              className={`text-xs px-1.5 py-0 h-4 ${SENIORITY_BADGE_CLASSES[contact.seniority] ?? SENIORITY_BADGE_CLASSES.Other}`}
+                            >
+                              {contact.seniority}
+                            </Badge>
+                          )}
+                        </div>
 
                         {/* Phone */}
                         {contact.phone && (
@@ -906,6 +1024,30 @@ export default function ClientDetailPage() {
                 />
               </div>
             </div>
+            <div className="space-y-1.5">
+              <Label>Seniority</Label>
+              <Select
+                value={contactForm.seniority || "none"}
+                onValueChange={(v) =>
+                  setContactForm((p) => ({
+                    ...p,
+                    seniority: v === "none" ? "" : v,
+                  }))
+                }
+              >
+                <SelectTrigger data-ocid="contact.seniority.select">
+                  <SelectValue placeholder="Select seniority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Select seniority —</SelectItem>
+                  {SENIORITY_OPTIONS.map((opt) => (
+                    <SelectItem key={opt} value={opt}>
+                      {opt}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Phone</Label>
@@ -1019,6 +1161,30 @@ export default function ClientDetailPage() {
                 />
               </div>
             </div>
+            <div className="space-y-1.5">
+              <Label>Seniority</Label>
+              <Select
+                value={contactForm.seniority || "none"}
+                onValueChange={(v) =>
+                  setContactForm((p) => ({
+                    ...p,
+                    seniority: v === "none" ? "" : v,
+                  }))
+                }
+              >
+                <SelectTrigger data-ocid="contact.edit.seniority.select">
+                  <SelectValue placeholder="Select seniority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Select seniority —</SelectItem>
+                  {SENIORITY_OPTIONS.map((opt) => (
+                    <SelectItem key={opt} value={opt}>
+                      {opt}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Phone</Label>
@@ -1069,6 +1235,121 @@ export default function ClientDetailPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Phone Import Staging Dialog ────────────────────────────────────── */}
+      <Dialog
+        open={phoneImportOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setPhoneImportOpen(false);
+            setStagedPhoneContacts([]);
+          }
+        }}
+      >
+        <DialogContent
+          className="max-w-lg max-h-[80vh] overflow-y-auto"
+          data-ocid="contact.phone_import.dialog"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-display">
+              Import from Phone Contacts
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <p className="text-sm text-muted-foreground">
+              Set department and seniority for each contact before importing.
+            </p>
+            {stagedPhoneContacts.map((c, idx) => (
+              <div
+                key={c.tempId}
+                className="border border-border rounded-lg p-3 space-y-3"
+              >
+                <div>
+                  <p className="font-medium text-sm">{c.name || "—"}</p>
+                  {c.phone && (
+                    <p className="text-xs text-muted-foreground">{c.phone}</p>
+                  )}
+                  {c.email && (
+                    <p className="text-xs text-muted-foreground">{c.email}</p>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Department *</Label>
+                    <Input
+                      data-ocid={`contact.phone_import.department.input.${idx + 1}`}
+                      value={c.department}
+                      onChange={(e) =>
+                        setStagedPhoneContacts((prev) =>
+                          prev.map((p) =>
+                            p.tempId === c.tempId
+                              ? { ...p, department: e.target.value }
+                              : p,
+                          ),
+                        )
+                      }
+                      placeholder="e.g. Purchase"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Seniority</Label>
+                    <Select
+                      value={c.seniority || "none"}
+                      onValueChange={(v) =>
+                        setStagedPhoneContacts((prev) =>
+                          prev.map((p) =>
+                            p.tempId === c.tempId
+                              ? { ...p, seniority: v === "none" ? "" : v }
+                              : p,
+                          ),
+                        )
+                      }
+                    >
+                      <SelectTrigger
+                        data-ocid={`contact.phone_import.seniority.select.${idx + 1}`}
+                      >
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— Select —</SelectItem>
+                        {SENIORITY_OPTIONS.map((opt) => (
+                          <SelectItem key={opt} value={opt}>
+                            {opt}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="mt-4">
+            <Button
+              type="button"
+              variant="outline"
+              data-ocid="contact.phone_import.cancel_button"
+              onClick={() => {
+                setPhoneImportOpen(false);
+                setStagedPhoneContacts([]);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              data-ocid="contact.phone_import.confirm_button"
+              onClick={handlePhoneImportConfirm}
+              disabled={isSavingContact}
+            >
+              {isSavingContact ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Import {stagedPhoneContacts.length} Contact
+              {stagedPhoneContacts.length !== 1 ? "s" : ""}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

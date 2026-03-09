@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   ClipboardList,
+  FileDown,
   FileText,
   Loader2,
   Send,
@@ -61,6 +62,77 @@ function formatDisplayDate(dateStr: string) {
     month: "short",
     year: "numeric",
   });
+}
+
+// ── PDF print helper ─────────────────────────────────────────────────────────
+
+function printDailyReportsPDF(
+  reports: DailyReport[],
+  clientMap: Map<string, string>,
+) {
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) return;
+  const date = new Date().toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+
+  const sections = reports
+    .map((r) => {
+      const linkedNames = r.linkedClientIds
+        .map((id) => clientMap.get(id))
+        .filter(Boolean)
+        .join(", ");
+      const reportDate = new Date(r.date).toLocaleDateString("en-IN", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+      return `
+      <div class="report">
+        <div class="report-header">
+          <strong>${reportDate}</strong> &nbsp;–&nbsp; ${r.staffName}
+          ${linkedNames ? `<span class="clients"> | Clients: ${linkedNames}</span>` : ""}
+        </div>
+        <div class="report-body">${r.reportText.replace(/\n/g, "<br>")}</div>
+        ${r.pendingActions?.trim() ? `<div class="pending"><strong>Pending Actions:</strong><br>${r.pendingActions.replace(/\n/g, "<br>")}</div>` : ""}
+      </div>`;
+    })
+    .join("");
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Daily Field Reports – Polypick Engineers Pvt Ltd</title>
+      <style>
+        body { font-family: Arial, sans-serif; max-width: 780px; margin: 30px auto; color: #111; font-size: 12px; }
+        .header { text-align: center; border-bottom: 2px solid #222; padding-bottom: 12px; margin-bottom: 20px; }
+        .header h1 { margin: 0; font-size: 20px; }
+        .header p { margin: 3px 0; color: #555; font-size: 12px; }
+        .report { margin-bottom: 18px; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; }
+        .report-header { background: #f5f5f5; padding: 8px 12px; font-size: 12px; border-bottom: 1px solid #ddd; }
+        .clients { color: #555; }
+        .report-body { padding: 10px 12px; font-size: 12px; line-height: 1.6; white-space: pre-wrap; }
+        .pending { padding: 8px 12px; background: #fffbeb; border-top: 1px solid #fde68a; font-size: 11px; color: #92400e; }
+        @media print { body { margin: 10px; } }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>Polypick Engineers Pvt Ltd</h1>
+        <p>Daily Field Reports</p>
+        <p>Generated: ${date} &nbsp;|&nbsp; Total Reports: ${reports.length}</p>
+      </div>
+      ${sections}
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
@@ -448,9 +520,25 @@ export default function DailyReportPage() {
               <ClipboardList size={18} className="text-primary" />
               {isAdmin ? "All Reports" : "My Reports"}
             </h2>
-            <Badge variant="outline" className="text-xs">
-              {visibleReports.length} total
-            </Badge>
+            <div className="flex items-center gap-2">
+              {visibleReports.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-ocid="daily_report.pdf.button"
+                  onClick={() =>
+                    printDailyReportsPDF(visibleReports, clientMap)
+                  }
+                  className="gap-2"
+                >
+                  <FileDown size={14} />
+                  Export PDF
+                </Button>
+              )}
+              <Badge variant="outline" className="text-xs">
+                {visibleReports.length} total
+              </Badge>
+            </div>
           </div>
 
           {visibleReports.length === 0 ? (

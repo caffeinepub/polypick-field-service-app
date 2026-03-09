@@ -62,6 +62,8 @@ export function useUserProfile() {
       return actor.getCallerUserProfile();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 30_000,
+    gcTime: 120_000,
   });
 }
 
@@ -90,6 +92,8 @@ export function useClients() {
       return actor.getAllClients();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 60_000,
+    gcTime: 300_000,
   });
 }
 
@@ -102,6 +106,8 @@ export function useClient(id: bigint | null) {
       return actor.getClient(id);
     },
     enabled: !!actor && !isFetching && id !== null,
+    staleTime: 60_000,
+    gcTime: 300_000,
   });
 }
 
@@ -153,6 +159,8 @@ export function useTotalClientsCount() {
       return actor.getTotalClientsCount();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 60_000,
+    gcTime: 300_000,
   });
 }
 
@@ -167,6 +175,8 @@ export function useInteractions() {
       return actor.getAllInteractions();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 60_000,
+    gcTime: 300_000,
   });
 }
 
@@ -186,6 +196,8 @@ export function useInteractionsSummary() {
       return actor.getInteractionsSummary();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 60_000,
+    gcTime: 300_000,
   });
 }
 
@@ -203,6 +215,8 @@ export function usePipelineStats() {
       return actor.getPipelineStats();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 60_000,
+    gcTime: 300_000,
   });
 }
 
@@ -259,7 +273,7 @@ export function useDeleteInteraction() {
 
 // ── Visits ───────────────────────────────────────────────────────────────────
 
-export function useAllVisits() {
+export function useAllVisits(enabled = true) {
   const { actor, isFetching } = useActor();
   return useQuery<T[]>({
     queryKey: ["allVisits"],
@@ -267,11 +281,13 @@ export function useAllVisits() {
       if (!actor) return [];
       return actor.getAllVisits();
     },
-    enabled: !!actor && !isFetching,
+    enabled: !!actor && !isFetching && enabled,
+    staleTime: 60_000,
+    gcTime: 300_000,
   });
 }
 
-export function useMyVisits() {
+export function useMyVisits(enabled = true) {
   const { actor, isFetching } = useActor();
   return useQuery<T[]>({
     queryKey: ["myVisits"],
@@ -279,7 +295,9 @@ export function useMyVisits() {
       if (!actor) return [];
       return actor.getVisitsForCaller();
     },
-    enabled: !!actor && !isFetching,
+    enabled: !!actor && !isFetching && enabled,
+    staleTime: 60_000,
+    gcTime: 300_000,
   });
 }
 
@@ -337,12 +355,14 @@ export function useVisitLogsCountPerStaff() {
       return actor.getVisitLogsCountPerStaff();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 60_000,
+    gcTime: 300_000,
   });
 }
 
 // ── TA DA Claims ─────────────────────────────────────────────────────────────
 
-export function useAllClaims() {
+export function useAllClaims(enabled = true) {
   const { actor, isFetching } = useActor();
   return useQuery<T__3[]>({
     queryKey: ["allClaims"],
@@ -350,11 +370,13 @@ export function useAllClaims() {
       if (!actor) return [];
       return actor.getAllClaims();
     },
-    enabled: !!actor && !isFetching,
+    enabled: !!actor && !isFetching && enabled,
+    staleTime: 60_000,
+    gcTime: 300_000,
   });
 }
 
-export function useMyClaims() {
+export function useMyClaims(enabled = true) {
   const { actor, isFetching } = useActor();
   return useQuery<T__3[]>({
     queryKey: ["myClaims"],
@@ -362,7 +384,9 @@ export function useMyClaims() {
       if (!actor) return [];
       return actor.getClaimsForCaller();
     },
-    enabled: !!actor && !isFetching,
+    enabled: !!actor && !isFetching && enabled,
+    staleTime: 60_000,
+    gcTime: 300_000,
   });
 }
 
@@ -423,6 +447,8 @@ export function useClaimsSummaryPerStaff() {
       return actor.getClaimsSummaryPerStaff();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 60_000,
+    gcTime: 300_000,
   });
 }
 

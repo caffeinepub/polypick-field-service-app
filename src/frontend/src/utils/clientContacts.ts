@@ -3,6 +3,7 @@ export interface ClientContact {
   name: string;
   department: string; // free text
   designation: string;
+  seniority: string; // Senior / Junior / Manager / Director / Other
   phone: string;
   email: string;
 }

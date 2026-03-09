@@ -42,14 +42,18 @@ import { useNavigate } from "@tanstack/react-router";
 import {
   Building2,
   Database,
+  Download,
   Eye,
+  FileDown,
   Loader2,
   Plus,
   Search,
+  Sheet,
   Trash2,
+  Upload,
   Users,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
@@ -206,6 +210,89 @@ const SAMPLE_CLIENTS = [
   },
 ];
 
+// ── PDF print helper ─────────────────────────────────────────────────────────
+
+function printClientsPDF(clients: T__2[]) {
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) return;
+  const date = new Date().toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+  const rows = clients
+    .map(
+      (c) => `
+      <tr>
+        <td>${c.name}</td>
+        <td>${c.company}</td>
+        <td>${extractIndustry(c.notes) || "—"}</td>
+        <td>${c.phone || "—"}</td>
+        <td>${c.email || "—"}</td>
+        <td>${c.address || "—"}</td>
+      </tr>`,
+    )
+    .join("");
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Client List – Polypick Engineers Pvt Ltd</title>
+      <style>
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; color: #111; font-size: 12px; }
+        .header { text-align: center; border-bottom: 2px solid #222; padding-bottom: 12px; margin-bottom: 20px; }
+        .header h1 { margin: 0; font-size: 20px; }
+        .header p { margin: 3px 0; color: #555; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        th { background: #f0f0f0; padding: 8px 6px; text-align: left; font-size: 11px; border: 1px solid #ccc; }
+        td { padding: 7px 6px; border: 1px solid #ddd; vertical-align: top; }
+        tr:nth-child(even) td { background: #fafafa; }
+        .count { color: #666; font-size: 11px; margin-bottom: 8px; }
+        @media print { body { margin: 10px; } }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>Polypick Engineers Pvt Ltd</h1>
+        <p>Client Directory</p>
+        <p>Generated: ${date} &nbsp;|&nbsp; Total Clients: ${clients.length}</p>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Company</th>
+            <th>Industry</th>
+            <th>Phone</th>
+            <th>Email</th>
+            <th>Address</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+}
+
+// ── Sample CSV download ───────────────────────────────────────────────────────
+
+function downloadSampleCSV() {
+  const csvContent =
+    "Name,Company,Phone,Email,Address,Industry,Notes\nRaju Singh,BRPL Barbil,9876543210,raju@brpl.com,Barbil Odisha,Steel Plant,Payment follow-up";
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "sample_clients.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function ClientsPage() {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -213,6 +300,10 @@ export default function ClientsPage() {
   const [deleteId, setDeleteId] = useState<bigint | null>(null);
   const [phoneError, setPhoneError] = useState("");
   const [isBulkAdding, setIsBulkAdding] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isImportingExcel, setIsImportingExcel] = useState(false);
+  const csvInputRef = useRef<HTMLInputElement>(null);
+  const excelInputRef = useRef<HTMLInputElement>(null);
 
   const { data: clients, isLoading } = useClients();
   const createClient = useCreateClient();
@@ -294,6 +385,103 @@ export default function ClientsPage() {
     }
   };
 
+  const handleCSVImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !identity) return;
+    e.target.value = ""; // reset so same file can be re-selected
+    setIsImporting(true);
+    toast("Importing clients...");
+    try {
+      const text = await file.text();
+      const lines = text
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
+      // Skip header row
+      const dataLines = lines.slice(1);
+      let count = 0;
+      for (const line of dataLines) {
+        const cols = line.split(",");
+        const name = (cols[0] ?? "").trim();
+        if (!name) continue;
+        const company = (cols[1] ?? "").trim();
+        const phone = (cols[2] ?? "").trim();
+        const email = (cols[3] ?? "").trim();
+        const address = (cols[4] ?? "").trim();
+        const industry = (cols[5] ?? "").trim();
+        const rawNotes = (cols[6] ?? "").trim();
+        const notes = encodeIndustry(rawNotes, industry);
+        await createClient.mutateAsync({
+          id: 0n,
+          name,
+          company,
+          phone,
+          email,
+          address,
+          notes,
+          createdAt: BigInt(Date.now()) * 1_000_000n,
+          updatedAt: BigInt(Date.now()) * 1_000_000n,
+          createdBy: identity.getPrincipal() as Principal,
+        });
+        count++;
+      }
+      toast.success(`${count} client${count !== 1 ? "s" : ""} imported!`);
+    } catch {
+      toast.error("Import failed. Please check the CSV format.");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !identity) return;
+    e.target.value = "";
+    setIsImportingExcel(true);
+    toast("Importing from CSV/Excel (save as CSV first)...");
+    try {
+      const text = await file.text();
+      // Support both comma and tab separated
+      const lines = text
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+      const dataLines = lines.slice(1);
+      let count = 0;
+      for (const line of dataLines) {
+        const sep = line.includes("\t") ? "\t" : ",";
+        const cols = line.split(sep);
+        const name = (cols[0] ?? "").replace(/^"|"$/g, "").trim();
+        if (!name) continue;
+        const company = (cols[1] ?? "").replace(/^"|"$/g, "").trim();
+        const phone = (cols[2] ?? "").replace(/^"|"$/g, "").trim();
+        const email = (cols[3] ?? "").replace(/^"|"$/g, "").trim();
+        const address = (cols[4] ?? "").replace(/^"|"$/g, "").trim();
+        const industry = (cols[5] ?? "").replace(/^"|"$/g, "").trim();
+        const rawNotes = (cols[6] ?? "").replace(/^"|"$/g, "").trim();
+        const notes = encodeIndustry(rawNotes, industry);
+        await createClient.mutateAsync({
+          id: 0n,
+          name,
+          company,
+          phone,
+          email,
+          address,
+          notes,
+          createdAt: BigInt(Date.now()) * 1_000_000n,
+          updatedAt: BigInt(Date.now()) * 1_000_000n,
+          createdBy: identity.getPrincipal() as Principal,
+        });
+        count++;
+      }
+      toast.success(`${count} client${count !== 1 ? "s" : ""} imported!`);
+    } catch {
+      toast.error("Import failed. Please save the Excel file as CSV first.");
+    } finally {
+      setIsImportingExcel(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (deleteId === null) return;
     try {
@@ -320,6 +508,84 @@ export default function ClientsPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Hidden CSV file input */}
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={handleCSVImport}
+          />
+
+          {/* Hidden Excel file input */}
+          <input
+            ref={excelInputRef}
+            type="file"
+            accept=".csv,.xlsx,.xls,.txt"
+            className="hidden"
+            onChange={handleExcelImport}
+          />
+
+          {/* Download Sample CSV */}
+          <Button
+            variant="outline"
+            size="sm"
+            data-ocid="clients.download_sample.button"
+            onClick={downloadSampleCSV}
+            className="gap-2"
+          >
+            <Download size={15} />
+            Sample CSV
+          </Button>
+
+          {/* Import CSV */}
+          <Button
+            variant="outline"
+            size="sm"
+            data-ocid="clients.import.upload_button"
+            onClick={() => csvInputRef.current?.click()}
+            disabled={isImporting || !identity}
+            className="gap-2"
+          >
+            {isImporting ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <Upload size={15} />
+            )}
+            {isImporting ? "Importing..." : "Import CSV"}
+          </Button>
+
+          {/* Import Excel */}
+          <Button
+            variant="outline"
+            size="sm"
+            data-ocid="clients.import_excel.upload_button"
+            onClick={() => excelInputRef.current?.click()}
+            disabled={isImportingExcel || !identity}
+            className="gap-2"
+          >
+            {isImportingExcel ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <Sheet size={15} />
+            )}
+            {isImportingExcel ? "Importing..." : "Import Excel"}
+          </Button>
+
+          {/* Export PDF */}
+          {!isLoading && (clients ?? []).length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              data-ocid="clients.pdf.button"
+              onClick={() => printClientsPDF(clients ?? [])}
+              className="gap-2"
+            >
+              <FileDown size={15} />
+              Export PDF
+            </Button>
+          )}
+
           {!isLoading && (clients ?? []).length === 0 && (
             <Button
               variant="outline"
