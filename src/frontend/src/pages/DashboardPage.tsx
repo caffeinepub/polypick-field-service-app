@@ -314,42 +314,25 @@ export default function DashboardPage() {
                 </Link>
               </div>
             ) : (
-              <>
-                {(() => {
-                  const plannedTodayCount = todayVisits.filter(
-                    (v) => v.status === "planned",
-                  ).length;
-                  return plannedTodayCount > 0 ? (
-                    <div
-                      data-ocid="visits.action_needed.card"
-                      className="mb-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium"
-                    >
-                      <span className="inline-block h-2 w-2 rounded-full bg-amber-500 animate-pulse flex-shrink-0" />
-                      Action needed: {plannedTodayCount} visit
-                      {plannedTodayCount !== 1 ? "s" : ""} planned today
+              <ul className="space-y-2">
+                {todayVisits.slice(0, 5).map((v, i) => (
+                  <li
+                    key={v.id.toString()}
+                    data-ocid={`visits.item.${i + 1}`}
+                    className="flex items-center justify-between py-2 border-b border-border last:border-0"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {v.purpose.replace(/\[GPS:[^\]]+\]\s*/, "")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(v.plannedDate)}
+                      </p>
                     </div>
-                  ) : null;
-                })()}
-                <ul className="space-y-2">
-                  {todayVisits.slice(0, 5).map((v, i) => (
-                    <li
-                      key={v.id.toString()}
-                      data-ocid={`visits.item.${i + 1}`}
-                      className="flex items-center justify-between py-2 border-b border-border last:border-0"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {v.purpose.replace(/\[GPS:[^\]]+\]\s*/, "")}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatDate(v.plannedDate)}
-                        </p>
-                      </div>
-                      <StatusBadge status={v.status} />
-                    </li>
-                  ))}
-                </ul>
-              </>
+                    <StatusBadge status={v.status} />
+                  </li>
+                ))}
+              </ul>
             )}
           </CardContent>
         </Card>

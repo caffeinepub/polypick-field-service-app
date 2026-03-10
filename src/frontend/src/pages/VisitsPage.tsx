@@ -40,15 +40,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type { Principal } from "@icp-sdk/core/principal";
 import {
-  ArrowLeft,
   ArrowRight,
-  Ban,
   CalendarCheck,
-  CalendarDays,
   CheckCircle2,
-  Copy,
   FileDown,
-  FileSpreadsheet,
   FileUp,
   Loader2,
   MapPin,
@@ -58,7 +53,6 @@ import {
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
 import { Status } from "../backend.d";
 import { StatusBadge } from "../components/StatusBadge";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
@@ -158,104 +152,6 @@ function printVisitsPDF(
   printWindow.print();
 }
 
-// ── Monthly PDF print helper ─────────────────────────────────────────────────
-
-function printMonthlyVisitsPDF(
-  visits: T[],
-  monthYear: string,
-  getClientName: (id: bigint) => string,
-) {
-  const printWindow = window.open("", "_blank");
-  if (!printWindow) return;
-  const genDate = new Date().toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-
-  // Group visits by date
-  const byDate = new Map<string, T[]>();
-  for (const v of visits) {
-    const d = new Date(Number(v.plannedDate / 1_000_000n));
-    const key = d.toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-    if (!byDate.has(key)) byDate.set(key, []);
-    byDate.get(key)!.push(v);
-  }
-
-  const sortedDates = Array.from(byDate.keys()).sort((a, b) => {
-    return new Date(a).getTime() - new Date(b).getTime();
-  });
-
-  const sections = sortedDates
-    .map((dateKey) => {
-      const dayVisits = byDate.get(dateKey)!;
-      const rows = dayVisits
-        .map((v) => {
-          const meta = decodeTravelMeta(v.purpose);
-          const route =
-            meta.from || meta.to
-              ? `${meta.from || "—"} → ${meta.to || "—"}${meta.dist ? ` (${meta.dist} km)` : ""}`
-              : "—";
-          return `<tr>
-            <td>${getClientName(v.clientId)}</td>
-            <td>${route}</td>
-            <td>${meta.dist ? `${meta.dist} km` : "—"}</td>
-            <td style="text-transform:capitalize">${v.status}</td>
-            <td>${meta.purpose || "—"}</td>
-          </tr>`;
-        })
-        .join("");
-      return `
-      <div class="date-section">
-        <h3>${dateKey}</h3>
-        <table>
-          <thead>
-            <tr><th>Client</th><th>Route</th><th>Distance</th><th>Status</th><th>Purpose</th></tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>`;
-    })
-    .join("");
-
-  printWindow.document.write(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Monthly Visit Plan – Polypick Engineers Pvt Ltd</title>
-      <style>
-        body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; color: #111; font-size: 12px; }
-        .header { text-align: center; border-bottom: 2px solid #222; padding-bottom: 12px; margin-bottom: 20px; }
-        .header h1 { margin: 0; font-size: 20px; }
-        .header p { margin: 3px 0; color: #555; font-size: 12px; }
-        .date-section { margin-bottom: 20px; page-break-inside: avoid; }
-        .date-section h3 { background: #f0f0f0; padding: 6px 10px; margin: 0 0 4px 0; font-size: 13px; border-left: 3px solid #222; }
-        table { width: 100%; border-collapse: collapse; }
-        th { background: #f8f8f8; padding: 6px 5px; text-align: left; font-size: 11px; border: 1px solid #ccc; }
-        td { padding: 5px; border: 1px solid #ddd; font-size: 11px; }
-        tr:nth-child(even) td { background: #fafafa; }
-        @media print { body { margin: 10px; } .date-section { page-break-inside: avoid; } }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <h1>Polypick Engineers Pvt Ltd</h1>
-        <p>Monthly Visit Plan – ${monthYear}</p>
-        <p>Total Visits: ${visits.length} &nbsp;|&nbsp; Generated: ${genDate}</p>
-      </div>
-      ${sections || "<p style='text-align:center;color:#888'>No visits for this month.</p>"}
-    </body>
-    </html>
-  `);
-  printWindow.document.close();
-  printWindow.focus();
-  printWindow.print();
-}
-
 // ── Travel metadata helpers ──────────────────────────────────────────────────
 
 function encodeTravelMeta(
@@ -335,45 +231,6 @@ function parseCSV(text: string): string[][] {
   });
 }
 
-// ── Calendar helpers ─────────────────────────────────────────────────────────
-
-function getDaysInMonth(year: number, month: number): number {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-function getFirstDayOfMonth(year: number, month: number): number {
-  return new Date(year, month, 1).getDay();
-}
-
-function getVisitsForDay(
-  visits: T[],
-  year: number,
-  month: number,
-  day: number,
-): T[] {
-  return visits.filter((v) => {
-    const d = new Date(Number(v.plannedDate / 1_000_000n));
-    return (
-      d.getFullYear() === year && d.getMonth() === month && d.getDate() === day
-    );
-  });
-}
-
-const MONTH_NAMES = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
-
 const emptyForm = {
   clientId: "",
   plannedDate: todayInputStr(),
@@ -398,21 +255,6 @@ export default function VisitsPage() {
   } | null>(null);
   const [capturingCompleteGps, setCapturingCompleteGps] = useState(false);
   const [form, setForm] = useState(emptyForm);
-
-  // ── Cancel Visit State ─────────────────────────────────────────────────────
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancellingVisit, setCancellingVisit] = useState<T | null>(null);
-  const [cancelReason, setCancelReason] = useState("");
-
-  // ── Copy Last Month State ──────────────────────────────────────────────────
-  const [copyOpen, setCopyOpen] = useState(false);
-  const [isCopying, setIsCopying] = useState(false);
-
-  // ── Calendar State ────────────────────────────────────────────────────────
-  const now = new Date();
-  const [calYear, setCalYear] = useState(now.getFullYear());
-  const [calMonth, setCalMonth] = useState(now.getMonth());
-  const [calSelectedDay, setCalSelectedDay] = useState<number | null>(null);
 
   // ── Bulk Upload State ──────────────────────────────────────────────────────
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -456,6 +298,7 @@ export default function VisitsPage() {
   }).length;
 
   // ── Travel Matrix ─────────────────────────────────────────────────────────
+  const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
 
@@ -487,27 +330,6 @@ export default function VisitsPage() {
     }
     return Array.from(map.values()).sort((a, b) => b.count - a.count);
   })();
-
-  // ── Calendar month visits ─────────────────────────────────────────────────
-  const calMonthVisits = visits.filter((v) => {
-    const d = new Date(Number(v.plannedDate / 1_000_000n));
-    return d.getFullYear() === calYear && d.getMonth() === calMonth;
-  });
-
-  // ── Last month info ───────────────────────────────────────────────────────
-  const lastMonthDate = new Date(currentYear, currentMonth - 1, 1);
-  const lastMonthName = MONTH_NAMES[lastMonthDate.getMonth()];
-  const lastMonthYear = lastMonthDate.getFullYear();
-  const currentMonthName = MONTH_NAMES[currentMonth];
-
-  const lastMonthPlannedVisits = visits.filter((v) => {
-    const d = new Date(Number(v.plannedDate / 1_000_000n));
-    return (
-      d.getFullYear() === lastMonthYear &&
-      d.getMonth() === lastMonthDate.getMonth() &&
-      v.status === "planned"
-    );
-  });
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -612,106 +434,6 @@ export default function VisitsPage() {
     }
   };
 
-  // ── Cancel Visit Handler ──────────────────────────────────────────────────
-
-  const handleCancelOpen = (visit: T) => {
-    setCancellingVisit(visit);
-    setCancelReason("");
-    setCancelOpen(true);
-  };
-
-  const handleCancelConfirm = async () => {
-    if (!cancellingVisit) return;
-    try {
-      await updateVisit.mutateAsync({
-        id: cancellingVisit.id,
-        visit: {
-          ...cancellingVisit,
-          status: Status.cancelled,
-          completionNotes: cancelReason.trim()
-            ? `Cancelled: ${cancelReason.trim()}`
-            : "Cancelled",
-        },
-      });
-      toast.success("Visit cancelled");
-      setCancelOpen(false);
-      setCancellingVisit(null);
-    } catch {
-      toast.error("Failed to cancel visit");
-    }
-  };
-
-  // ── Copy Last Month Handler ───────────────────────────────────────────────
-
-  const handleCopyLastMonth = async () => {
-    if (!identity || lastMonthPlannedVisits.length === 0) return;
-    setIsCopying(true);
-    const daysInCurrentMonth = getDaysInMonth(currentYear, currentMonth);
-    let copied = 0;
-    let skipped = 0;
-    for (const v of lastMonthPlannedVisits) {
-      const lastD = new Date(Number(v.plannedDate / 1_000_000n));
-      const dayOfMonth = lastD.getDate();
-      // Skip if day doesn't exist in current month (e.g. Feb 30)
-      if (dayOfMonth > daysInCurrentMonth) {
-        skipped++;
-        continue;
-      }
-      const newDate = new Date(currentYear, currentMonth, dayOfMonth);
-      const yyyy = newDate.getFullYear();
-      const mm = String(newDate.getMonth() + 1).padStart(2, "0");
-      const dd = String(newDate.getDate()).padStart(2, "0");
-      try {
-        await createVisit.mutateAsync({
-          id: 0n,
-          userId: identity.getPrincipal() as Principal,
-          clientId: v.clientId,
-          plannedDate: dateInputToNs(`${yyyy}-${mm}-${dd}`),
-          purpose: v.purpose,
-          status: Status.planned,
-          completionNotes: "",
-          completedAt: 0n,
-        });
-        copied++;
-      } catch {
-        skipped++;
-      }
-    }
-    setIsCopying(false);
-    setCopyOpen(false);
-    toast.success(
-      `${copied} visit${copied !== 1 ? "s" : ""} copied from ${lastMonthName} to ${currentMonthName}${skipped > 0 ? ` (${skipped} skipped)` : ""}`,
-    );
-  };
-
-  // ── Export Monthly Excel ──────────────────────────────────────────────────
-
-  const handleExportMonthlyExcel = () => {
-    const monthVisits = visits.filter((v) => {
-      const d = new Date(Number(v.plannedDate / 1_000_000n));
-      return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
-    });
-    const rows = monthVisits.map((v) => {
-      const meta = decodeTravelMeta(v.purpose);
-      const d = new Date(Number(v.plannedDate / 1_000_000n));
-      return {
-        Date: d.toLocaleDateString("en-CA"), // YYYY-MM-DD
-        Client: getClientName(v.clientId),
-        From: meta.from || "",
-        To: meta.to || "",
-        "Distance (km)": meta.dist || "",
-        Purpose: meta.purpose || "",
-        Status: v.status,
-      };
-    });
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Visit Plan");
-    const monthStr = `${MONTH_NAMES[currentMonth]}${currentYear}`;
-    XLSX.writeFile(wb, `visit_plan_${monthStr}.xlsx`);
-    toast.success("Excel exported");
-  };
-
   // ── Bulk Upload Handlers ───────────────────────────────────────────────────
 
   const handleDownloadSampleCSV = () => {
@@ -731,97 +453,62 @@ export default function VisitsPage() {
     URL.revokeObjectURL(url);
   };
 
-  const parseBulkRows = (
-    data: string[][],
-    clientList: { id: bigint; name: string; company?: string }[],
-  ): BulkRow[] => {
-    const dataRows = data.slice(1);
-    return dataRows.map((cols) => {
-      const [
-        date = "",
-        clientName = "",
-        from = "",
-        to = "",
-        dist = "",
-        ...purposeParts
-      ] = cols;
-      const purpose = purposeParts.join(",").trim();
-      const row: BulkRow = {
-        date: date.trim(),
-        clientName: clientName.trim(),
-        from: from.trim(),
-        to: to.trim(),
-        distanceKm: dist.trim(),
-        purpose,
-        valid: false,
-      };
-      // Validate date
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(row.date)) {
-        row.error = "Invalid date (use YYYY-MM-DD)";
-        return row;
-      }
-      // Validate client
-      const matched = clientList.find(
-        (c) =>
-          c.name.toLowerCase() === row.clientName.toLowerCase() ||
-          (c.company &&
-            c.company.toLowerCase() === row.clientName.toLowerCase()),
-      );
-      if (!matched) {
-        row.error = `Client not found: "${row.clientName}"`;
-        return row;
-      }
-      row.clientId = matched.id;
-      row.valid = true;
-      return row;
-    });
-  };
-
   const handleBulkFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const clientList = clients ?? [];
-    const ext = file.name.split(".").pop()?.toLowerCase();
-
-    if (ext === "xlsx" || ext === "xls") {
-      // Parse Excel with SheetJS
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        try {
-          const data = new Uint8Array(ev.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: "array" });
-          const sheetName = workbook.SheetNames[0];
-          const sheet = workbook.Sheets[sheetName];
-          // Convert to array of arrays (header + rows)
-          const rows: string[][] = XLSX.utils.sheet_to_json(sheet, {
-            header: 1,
-            defval: "",
-            raw: false,
-          }) as string[][];
-          if (rows.length < 2) {
-            toast.error("Excel file is empty or has no data rows");
-            return;
-          }
-          setBulkRows(parseBulkRows(rows, clientList));
-        } catch {
-          toast.error("Failed to parse Excel file");
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const parsed = parseCSV(text);
+      if (parsed.length < 2) {
+        toast.error("CSV file is empty or has no data rows");
+        return;
+      }
+      // Skip header row
+      const dataRows = parsed.slice(1);
+      const clientList = clients ?? [];
+      const validated: BulkRow[] = dataRows.map((cols) => {
+        const [
+          date = "",
+          clientName = "",
+          from = "",
+          to = "",
+          dist = "",
+          ...purposeParts
+        ] = cols;
+        const purpose = purposeParts.join(",").trim();
+        const row: BulkRow = {
+          date: date.trim(),
+          clientName: clientName.trim(),
+          from: from.trim(),
+          to: to.trim(),
+          distanceKm: dist.trim(),
+          purpose,
+          valid: false,
+        };
+        // Validate date
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(row.date)) {
+          row.error = "Invalid date (use YYYY-MM-DD)";
+          return row;
         }
-      };
-      reader.readAsArrayBuffer(file);
-    } else {
-      // Parse CSV
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const text = ev.target?.result as string;
-        const parsed = parseCSV(text);
-        if (parsed.length < 2) {
-          toast.error("CSV file is empty or has no data rows");
-          return;
+        // Validate client
+        const matched = clientList.find(
+          (c) =>
+            c.name.toLowerCase() === row.clientName.toLowerCase() ||
+            (c.company &&
+              c.company.toLowerCase() === row.clientName.toLowerCase()),
+        );
+        if (!matched) {
+          row.error = `Client not found: "${row.clientName}"`;
+          return row;
         }
-        setBulkRows(parseBulkRows(parsed, clientList));
-      };
-      reader.readAsText(file);
-    }
+        row.clientId = matched.id;
+        row.valid = true;
+        return row;
+      });
+      setBulkRows(validated);
+    };
+    reader.readAsText(file);
   };
 
   const handleBulkImport = async () => {
@@ -870,33 +557,6 @@ export default function VisitsPage() {
 
   const validBulkCount = bulkRows.filter((r) => r.valid).length;
 
-  // ── Calendar nav ──────────────────────────────────────────────────────────
-
-  const handleCalPrev = () => {
-    if (calMonth === 0) {
-      setCalMonth(11);
-      setCalYear((y) => y - 1);
-    } else {
-      setCalMonth((m) => m - 1);
-    }
-    setCalSelectedDay(null);
-  };
-
-  const handleCalNext = () => {
-    if (calMonth === 11) {
-      setCalMonth(0);
-      setCalYear((y) => y + 1);
-    } else {
-      setCalMonth((m) => m + 1);
-    }
-    setCalSelectedDay(null);
-  };
-
-  const selectedDayVisits =
-    calSelectedDay !== null
-      ? getVisitsForDay(visits, calYear, calMonth, calSelectedDay)
-      : [];
-
   return (
     <div className="p-6 md:p-8 space-y-6 animate-fade-in pb-20 md:pb-8">
       {/* Header */}
@@ -910,8 +570,8 @@ export default function VisitsPage() {
             {isAdmin ? "All staff visits" : "Plan and track your client visits"}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {filtered.length > 0 && activeTab !== "calendar" && (
+        <div className="flex items-center gap-2">
+          {filtered.length > 0 && (
             <Button
               variant="outline"
               size="sm"
@@ -927,49 +587,6 @@ export default function VisitsPage() {
               Export PDF
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            data-ocid="visits.monthly_pdf.button"
-            onClick={() => {
-              const monthVisits = visits.filter((v) => {
-                const d = new Date(Number(v.plannedDate / 1_000_000n));
-                return (
-                  d.getFullYear() === currentYear &&
-                  d.getMonth() === currentMonth
-                );
-              });
-              printMonthlyVisitsPDF(
-                monthVisits,
-                `${MONTH_NAMES[currentMonth]} ${currentYear}`,
-                getClientName,
-              );
-            }}
-            className="gap-2"
-          >
-            <FileDown size={15} />
-            Monthly PDF
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            data-ocid="visits.export_excel.button"
-            onClick={handleExportMonthlyExcel}
-            className="gap-2"
-          >
-            <FileSpreadsheet size={15} />
-            Export Excel
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            data-ocid="visits.copy_last_month.button"
-            onClick={() => setCopyOpen(true)}
-            className="gap-2"
-          >
-            <Copy size={15} />
-            Copy Last Month
-          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -1025,7 +642,7 @@ export default function VisitsPage() {
         </Card>
       </div>
 
-      {/* Table with Tabs + Calendar */}
+      {/* Table with Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           {STATUS_TABS.map((tab) => (
@@ -1038,14 +655,6 @@ export default function VisitsPage() {
               {tab}
             </TabsTrigger>
           ))}
-          <TabsTrigger
-            value="calendar"
-            data-ocid="visits.calendar.tab"
-            className="gap-1.5"
-          >
-            <CalendarDays size={14} />
-            Calendar
-          </TabsTrigger>
         </TabsList>
 
         {STATUS_TABS.map((tab) => (
@@ -1065,7 +674,7 @@ export default function VisitsPage() {
                       </TableHead>
                     )}
                     <TableHead className="font-semibold">Status</TableHead>
-                    <TableHead className="font-semibold text-right w-40">
+                    <TableHead className="font-semibold text-right w-36">
                       Actions
                     </TableHead>
                   </TableRow>
@@ -1168,28 +777,16 @@ export default function VisitsPage() {
                           <TableCell>
                             <div className="flex items-center justify-end gap-1">
                               {visit.status === "planned" && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    data-ocid={`visits.complete_button.${idx + 1}`}
-                                    onClick={() => handleCompleteOpen(visit)}
-                                    className="h-7 text-xs gap-1 text-emerald-700 border-emerald-200 hover:bg-emerald-50"
-                                  >
-                                    <CheckCircle2 size={12} />
-                                    Complete
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    data-ocid={`visits.cancel_button.${idx + 1}`}
-                                    onClick={() => handleCancelOpen(visit)}
-                                    className="h-7 text-xs gap-1 text-red-700 border-red-200 hover:bg-red-50"
-                                  >
-                                    <Ban size={12} />
-                                    Cancel
-                                  </Button>
-                                </>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  data-ocid={`visits.complete_button.${idx + 1}`}
+                                  onClick={() => handleCompleteOpen(visit)}
+                                  className="h-7 text-xs gap-1 text-emerald-700 border-emerald-200 hover:bg-emerald-50"
+                                >
+                                  <CheckCircle2 size={12} />
+                                  Complete
+                                </Button>
                               )}
                               <Button
                                 variant="ghost"
@@ -1211,137 +808,6 @@ export default function VisitsPage() {
             </div>
           </TabsContent>
         ))}
-
-        {/* Calendar Tab */}
-        <TabsContent value="calendar">
-          <div className="mt-4 space-y-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    data-ocid="visits.calendar.prev_button"
-                    onClick={handleCalPrev}
-                    className="h-8 w-8"
-                  >
-                    <ArrowLeft size={16} />
-                  </Button>
-                  <CardTitle className="font-display text-base">
-                    {MONTH_NAMES[calMonth]} {calYear}
-                  </CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    data-ocid="visits.calendar.next_button"
-                    onClick={handleCalNext}
-                    className="h-8 w-8"
-                  >
-                    <ArrowRight size={16} />
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {/* Day headers */}
-                <div className="grid grid-cols-7 mb-1">
-                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-                    (d) => (
-                      <div
-                        key={d}
-                        className="text-center text-xs font-semibold text-muted-foreground py-1"
-                      >
-                        {d}
-                      </div>
-                    ),
-                  )}
-                </div>
-                {/* Calendar grid */}
-                <CalendarGrid
-                  year={calYear}
-                  month={calMonth}
-                  visits={calMonthVisits}
-                  selectedDay={calSelectedDay}
-                  onSelectDay={(day) =>
-                    setCalSelectedDay((prev) => (prev === day ? null : day))
-                  }
-                />
-
-                {/* Legend */}
-                <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1.5">
-                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-blue-500" />
-                    Planned
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                    Completed
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-500" />
-                    Cancelled
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Selected day panel */}
-            {calSelectedDay !== null && (
-              <Card data-ocid="visits.calendar.panel">
-                <CardHeader className="pb-2">
-                  <CardTitle className="font-display text-sm flex items-center gap-2">
-                    <CalendarCheck size={15} className="text-primary" />
-                    {calSelectedDay} {MONTH_NAMES[calMonth]} {calYear} —{" "}
-                    {selectedDayVisits.length} visit
-                    {selectedDayVisits.length !== 1 ? "s" : ""}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  {selectedDayVisits.length === 0 ? (
-                    <p
-                      className="text-sm text-muted-foreground py-4 text-center"
-                      data-ocid="visits.calendar.empty_state"
-                    >
-                      No visits on this day
-                    </p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {selectedDayVisits.map((v, i) => {
-                        const meta = decodeTravelMeta(v.purpose);
-                        return (
-                          <li
-                            key={v.id.toString()}
-                            data-ocid={`visits.calendar.item.${i + 1}`}
-                            className="flex items-start gap-3 p-2.5 rounded-lg bg-muted/30 border border-border"
-                          >
-                            <StatusBadge status={v.status} />
-                            <div className="min-w-0 flex-1">
-                              <p className="font-medium text-sm">
-                                {getClientName(v.clientId)}
-                              </p>
-                              {(meta.from || meta.to) && (
-                                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                  {meta.from || "—"}
-                                  <ArrowRight size={10} />
-                                  {meta.to || "—"}
-                                  {meta.dist && ` (${meta.dist} km)`}
-                                </p>
-                              )}
-                              {meta.purpose && (
-                                <p className="text-xs text-muted-foreground truncate">
-                                  {meta.purpose}
-                                </p>
-                              )}
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </TabsContent>
       </Tabs>
 
       {/* Travel Matrix */}
@@ -1677,145 +1143,6 @@ export default function VisitsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Cancel Visit Dialog */}
-      <Dialog
-        open={cancelOpen}
-        onOpenChange={(o) => {
-          if (!updateVisit.isPending) {
-            setCancelOpen(o);
-            if (!o) setCancellingVisit(null);
-          }
-        }}
-      >
-        <DialogContent className="max-w-sm" data-ocid="visits.cancel.dialog">
-          <DialogHeader>
-            <DialogTitle className="font-display flex items-center gap-2">
-              <Ban size={18} className="text-destructive" />
-              Cancel Visit
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-2">
-            {cancellingVisit && (
-              <p className="text-sm text-muted-foreground">
-                Cancel visit to{" "}
-                <span className="font-medium text-foreground">
-                  {getClientName(cancellingVisit.clientId)}
-                </span>{" "}
-                on{" "}
-                <span className="font-medium text-foreground">
-                  {formatDate(cancellingVisit.plannedDate)}
-                </span>
-                ?
-              </p>
-            )}
-            <div className="space-y-1.5">
-              <Label>Reason (optional)</Label>
-              <Textarea
-                data-ocid="visits.cancel.textarea"
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-                rows={3}
-                placeholder="Why is this visit being cancelled?"
-              />
-            </div>
-          </div>
-          <DialogFooter className="mt-4">
-            <Button
-              type="button"
-              variant="outline"
-              data-ocid="visits.cancel.cancel_button"
-              onClick={() => {
-                setCancelOpen(false);
-                setCancellingVisit(null);
-              }}
-              disabled={updateVisit.isPending}
-            >
-              Keep Visit
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              data-ocid="visits.cancel.confirm_button"
-              onClick={handleCancelConfirm}
-              disabled={updateVisit.isPending}
-              className="gap-2"
-            >
-              {updateVisit.isPending ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <Ban size={14} />
-              )}
-              Cancel Visit
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Copy Last Month Dialog */}
-      <Dialog
-        open={copyOpen}
-        onOpenChange={(o) => {
-          if (!isCopying) setCopyOpen(o);
-        }}
-      >
-        <DialogContent className="max-w-sm" data-ocid="visits.copy.dialog">
-          <DialogHeader>
-            <DialogTitle className="font-display flex items-center gap-2">
-              <Copy size={18} className="text-primary" />
-              Copy Last Month's Plan
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 mt-2">
-            <p className="text-sm text-muted-foreground">
-              Copy all{" "}
-              <span className="font-medium text-foreground">
-                {lastMonthPlannedVisits.length} planned visit
-                {lastMonthPlannedVisits.length !== 1 ? "s" : ""}
-              </span>{" "}
-              from{" "}
-              <span className="font-medium text-foreground">
-                {lastMonthName} {lastMonthYear}
-              </span>{" "}
-              to{" "}
-              <span className="font-medium text-foreground">
-                {currentMonthName} {currentYear}
-              </span>
-              ?
-            </p>
-            {lastMonthPlannedVisits.length === 0 && (
-              <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                No planned visits found in {lastMonthName} {lastMonthYear}.
-              </p>
-            )}
-          </div>
-          <DialogFooter className="mt-4">
-            <Button
-              type="button"
-              variant="outline"
-              data-ocid="visits.copy.cancel_button"
-              onClick={() => setCopyOpen(false)}
-              disabled={isCopying}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              data-ocid="visits.copy.confirm_button"
-              onClick={handleCopyLastMonth}
-              disabled={isCopying || lastMonthPlannedVisits.length === 0}
-              className="gap-2"
-            >
-              {isCopying ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <Copy size={14} />
-              )}
-              {isCopying ? "Copying…" : "Copy Visits"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Bulk Upload Dialog */}
       <Dialog
         open={bulkOpen}
@@ -1864,7 +1191,7 @@ export default function VisitsPage() {
             {/* Step 2 */}
             <div className="space-y-3">
               <p className="text-sm font-semibold text-foreground">
-                Step 2: Upload Filled CSV or Excel File
+                Step 2: Upload Filled CSV
               </p>
               <label
                 htmlFor="bulk-csv-input"
@@ -1873,16 +1200,13 @@ export default function VisitsPage() {
               >
                 <FileUp size={24} className="text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">
-                  Click to select CSV or Excel file
-                </span>
-                <span className="text-xs text-muted-foreground/70">
-                  Supported: .csv, .xlsx
+                  Click to select CSV file
                 </span>
                 <input
                   id="bulk-csv-input"
                   ref={bulkFileRef}
                   type="file"
-                  accept=".csv,.xlsx,.xls"
+                  accept=".csv"
                   className="hidden"
                   data-ocid="visits.bulk_upload.upload_button"
                   onChange={handleBulkFileChange}
@@ -2069,98 +1393,6 @@ export default function VisitsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-// ── Calendar Grid Component ──────────────────────────────────────────────────
-
-function CalendarGrid({
-  year,
-  month,
-  visits,
-  selectedDay,
-  onSelectDay,
-}: {
-  year: number;
-  month: number;
-  visits: T[];
-  selectedDay: number | null;
-  onSelectDay: (day: number) => void;
-}) {
-  const daysInMonth = getDaysInMonth(year, month);
-  const firstDay = getFirstDayOfMonth(year, month);
-  const today = new Date();
-  const isCurrentMonth =
-    today.getFullYear() === year && today.getMonth() === month;
-
-  const cells: (number | null)[] = [
-    ...Array(firstDay).fill(null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
-
-  // Pad to complete last row
-  while (cells.length % 7 !== 0) cells.push(null);
-
-  return (
-    <div className="grid grid-cols-7 gap-0.5">
-      {cells.map((day, i) => {
-        if (day === null) {
-          return (
-            // biome-ignore lint/suspicious/noArrayIndexKey: calendar grid
-            <div key={`empty-${i}`} className="h-12 rounded-md" />
-          );
-        }
-        const dayVisits = getVisitsForDay(visits, year, month, day);
-        const isToday = isCurrentMonth && today.getDate() === day;
-        const isSelected = selectedDay === day;
-        const plannedVisits = dayVisits.filter((v) => v.status === "planned");
-        const completedVisits = dayVisits.filter(
-          (v) => v.status === "completed",
-        );
-        const cancelledVisits = dayVisits.filter(
-          (v) => v.status === "cancelled",
-        );
-
-        return (
-          <button
-            key={day}
-            type="button"
-            data-ocid="visits.calendar.toggle"
-            onClick={() => onSelectDay(day)}
-            className={[
-              "h-12 rounded-md flex flex-col items-center justify-start pt-1 text-xs transition-colors relative cursor-pointer",
-              isSelected
-                ? "bg-primary text-primary-foreground"
-                : isToday
-                  ? "bg-primary/10 text-primary font-bold"
-                  : "hover:bg-muted/50",
-            ].join(" ")}
-          >
-            <span
-              className={[
-                "text-xs font-medium",
-                isSelected ? "text-primary-foreground" : "",
-              ].join(" ")}
-            >
-              {day}
-            </span>
-            {dayVisits.length > 0 && (
-              <div className="flex gap-0.5 mt-0.5 flex-wrap justify-center px-0.5">
-                {plannedVisits.length > 0 && (
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-500" />
-                )}
-                {completedVisits.length > 0 && (
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                )}
-                {cancelledVisits.length > 0 && (
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-500" />
-                )}
-              </div>
-            )}
-          </button>
-        );
-      })}
     </div>
   );
 }
