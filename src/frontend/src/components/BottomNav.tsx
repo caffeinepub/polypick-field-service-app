@@ -1,8 +1,8 @@
 import { cn } from "@/lib/utils";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
+  Bot,
   CalendarCheck,
-  FileText,
   GitBranch,
   LayoutDashboard,
   Receipt,
@@ -38,11 +38,11 @@ const BOTTOM_NAV_ITEMS = [
     ocid: "bottom_nav.visits.link",
   },
   {
-    label: "Report",
-    href: "/daily-report",
-    icon: FileText,
+    label: "Assistant",
+    href: "/assistant",
+    icon: Bot,
     exact: false,
-    ocid: "bottom_nav.daily_report.link",
+    ocid: "bottom_nav.assistant.link",
   },
 ];
 

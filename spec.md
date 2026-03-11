@@ -1,36 +1,33 @@
-# Polypick Field Service App
+# Polypick Engineers Field Service App
 
 ## Current State
-Full-stack field service app with:
-- Visit Planner (VisitsPage.tsx) with single-visit add dialog, travel matrix, tabs (all/planned/completed/cancelled)
-- Visits can be added one at a time via "Plan Visit" button
-- CSV/Excel import already exists for Clients page
-- Backend supports createVisit, useMyVisits, useAllVisits
+App has: Dashboard, Clients, PPI/Interactions, TA DA, Visits, Daily Report, Reports, Staff, Marketing Report, Profile. BottomNav has 5 items. No personal assistant module exists.
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Bulk Visit Upload** feature on VisitsPage:
-  - "Bulk Upload" button next to existing "Plan Visit" button
-  - A dialog with two tabs: (1) Download Sample CSV template, (2) Upload CSV/Excel file
-  - Sample CSV columns: Date (YYYY-MM-DD), Client Name, From, To, Distance (km), Purpose
-  - On upload: parse the file, match client names to existing clients list (case-insensitive), show a preview table of parsed rows with validation errors highlighted (e.g. unknown client name, missing date)
-  - User can confirm the preview → all valid rows are submitted as visits in bulk using createVisit mutation
-  - Show success count and skip count after import
+- New page: `/assistant` — Polypick Assistant (Smart Rule-Based)
+  - **Daily Briefing card**: Today's date, visits planned today, pending TA DA claims, pending follow-ups count, pipeline stuck items
+  - **Smart Reminders**: List of auto-generated reminders based on app data (e.g., visits not checked-in, claims pending >3 days)
+  - **Pipeline Alerts**: Enquiries/offers stuck >30 days highlighted as action items
+  - **Quick Commands**: Search box where user types commands like "add visit", "check TA DA", "add client" and gets shortcut buttons to navigate directly
+  - **My To-Do List**: Add, check off, delete personal to-do items (stored in localStorage)
+  - **Quick Notes**: A small notepad section (stored in localStorage)
+  - **Follow-up Tracker**: List of follow-ups with due dates, add/complete/delete (localStorage)
+  - **Monthly Performance Summary**: Stats for current month (visits done vs planned, claims submitted, PPI entries added)
+- New bottom nav item: "Assistant" with Bot icon, replacing one of existing 5 items or adding as 6th (keep all 5, but replace "Report" with "More" linking to assistant + report)
 
 ### Modify
-- VisitsPage.tsx: add Bulk Upload button and dialog (do not remove any existing features)
+- `routeTree.tsx`: Add `/assistant` route
+- `BottomNav.tsx`: Replace "Report" link with "Assistant" (Bot icon); move daily report access to assistant page or sidebar
 
 ### Remove
-- Nothing
+- Nothing removed
 
 ## Implementation Plan
-1. Add a "Bulk Upload" button in the header section of VisitsPage next to "Plan Visit"
-2. Create a bulk upload dialog with:
-   - Tab 1: "Download Template" -- button to download a sample CSV with headers and 2-3 example rows
-   - Tab 2: "Upload File" -- file input accepting .csv and .xlsx files
-3. CSV parsing: use PapaParse (already available or add as inline logic) for CSV; for XLSX use SheetJS (xlsx library) if available, else CSV only
-4. After parsing, show a preview table: Date | Client | Route | Purpose | Status (Valid/Error)
-5. "Import All Valid" button -- loop through valid rows, call createVisit.mutateAsync for each, show loading state
-6. Show toast: "X visits planned, Y skipped (client not found)"
-7. Sample CSV download: dynamically generate and trigger browser download of a CSV string with example data
+1. Create `AssistantPage.tsx` with all sections: Daily Briefing, Smart Reminders, Pipeline Alerts, Quick Commands, To-Do List, Quick Notes, Follow-up Tracker, Monthly Summary
+2. Use existing hooks (useMyVisits, useAllVisits, useMyClaims, useAllClaims, usePipelineStats, useIsAdmin) for real data
+3. Store To-Do, Notes, Follow-ups in localStorage with typed helpers
+4. Update `routeTree.tsx` to add `/assistant` lazy route
+5. Update `BottomNav.tsx`: replace "Report" with "Assistant" (Bot icon)
+6. Add a quick-access link to Daily Report from the Assistant page
