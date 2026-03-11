@@ -17,6 +17,14 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   BarChart3,
   CalendarCheck,
   FileText,
@@ -133,6 +141,23 @@ export default function ReportsPage() {
       (acc, c) => acc + Number(c.travelAllowance) + Number(c.dailyAllowance),
       0,
     );
+
+  // Expense Summary by category
+  const expenseSummary = (allClaims ?? []).reduce(
+    (acc, c) => {
+      const cat = ((c as any).expenseCategory as string) || "Other";
+      const amount = Number(c.travelAllowance) + Number(c.dailyAllowance);
+      if (!acc[cat]) acc[cat] = { count: 0, total: 0 };
+      acc[cat].count += 1;
+      acc[cat].total += amount;
+      return acc;
+    },
+    {} as Record<string, { count: number; total: number }>,
+  );
+  const expenseRows = Object.entries(expenseSummary).sort(
+    (a, b) => b[1].total - a[1].total,
+  );
+  const expenseTotal = expenseRows.reduce((s, [, v]) => s + v.total, 0);
 
   // ── Monthly Summary PDF ──────────────────────────────────────────────────
 
@@ -686,6 +711,58 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Expense Summary by Category */}
+      {expenseRows.length > 0 && (
+        <div data-ocid="reports.expense.section">
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-display text-base flex items-center gap-2">
+                <Receipt size={16} className="text-primary" />
+                Expense Summary by Category
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-0 pb-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Category</TableHead>
+                    <TableHead className="text-center">Claims</TableHead>
+                    <TableHead className="text-right">Total Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {expenseRows.map(([cat, data], idx) => (
+                    <TableRow
+                      key={cat}
+                      data-ocid={`reports.expense.row.${idx + 1}`}
+                    >
+                      <TableCell className="font-medium capitalize">
+                        {cat}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {data.count}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold">
+                        ₹{data.total.toLocaleString("en-IN")}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow className="bg-muted/50 font-bold">
+                    <TableCell>Total</TableCell>
+                    <TableCell className="text-center">
+                      {expenseRows.reduce((s, [, v]) => s + v.count, 0)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      ₹{expenseTotal.toLocaleString("en-IN")}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

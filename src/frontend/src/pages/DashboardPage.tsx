@@ -1,8 +1,9 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowRight,
   CalendarCheck,
@@ -11,13 +12,17 @@ import {
   GitBranch,
   LayoutDashboard,
   Receipt,
+  Search,
   TrendingUp,
   Users,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { StatusBadge } from "../components/StatusBadge";
 import {
   useAllClaims,
   useAllVisits,
+  useClients,
+  useInteractions,
   useIsAdmin,
   useMyClaims,
   useMyVisits,
@@ -82,7 +87,6 @@ function StatCard({
   );
 }
 
-// Quick action card — large, icon-forward, mobile-friendly
 function QuickActionCard({
   label,
   href,
@@ -125,6 +129,172 @@ function QuickActionCard({
   );
 }
 
+type SearchResult = {
+  type: "client" | "ppi" | "visit";
+  label: string;
+  sub: string;
+  href: string;
+};
+
+function GlobalSearch() {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const navigate = useNavigate();
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const { data: clients } = useClients();
+  const { data: interactions } = useInteractions();
+  const { data: allVisits } = useAllVisits();
+  const { data: myVisits } = useMyVisits();
+
+  useEffect(() => {
+    const q = query.trim().toLowerCase();
+    if (!q || q.length < 2) {
+      setResults([]);
+      setOpen(false);
+      return;
+    }
+
+    const out: SearchResult[] = [];
+
+    // Clients
+    const clientMatches = (clients ?? []).filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.company.toLowerCase().includes(q) ||
+        c.phone.includes(q),
+    );
+    for (const c of clientMatches.slice(0, 5)) {
+      out.push({
+        type: "client",
+        label: c.name,
+        sub: c.company || "Client",
+        href: `/clients/${c.id.toString()}`,
+      });
+    }
+
+    // PPI interactions
+    const visits = allVisits ?? myVisits ?? [];
+    const clientNameMap = new Map(
+      (clients ?? []).map((c) => [c.id.toString(), c.name]),
+    );
+    const intMatches = (interactions ?? []).filter(
+      (i) =>
+        i.title.toLowerCase().includes(q) ||
+        (clientNameMap.get(i.clientId.toString()) ?? "")
+          .toLowerCase()
+          .includes(q),
+    );
+    for (const i of intMatches.slice(0, 5)) {
+      out.push({
+        type: "ppi",
+        label: i.title,
+        sub: clientNameMap.get(i.clientId.toString())
+          ? `${clientNameMap.get(i.clientId.toString())} · ${i.type}`
+          : i.type,
+        href: "/interactions",
+      });
+    }
+
+    // Visits
+    const visitMatches = visits.filter((v) => {
+      const clientName = clientNameMap.get(v.clientId.toString()) ?? "";
+      return (
+        v.purpose.toLowerCase().includes(q) ||
+        clientName.toLowerCase().includes(q)
+      );
+    });
+    for (const v of visitMatches.slice(0, 5)) {
+      out.push({
+        type: "visit",
+        label: clientNameMap.get(v.clientId.toString()) ?? "Visit",
+        sub: formatDate(v.plannedDate),
+        href: "/visits",
+      });
+    }
+
+    setResults(out);
+    setOpen(out.length > 0);
+  }, [query, clients, interactions, allVisits, myVisits]);
+
+  // Close on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const typeIcons: Record<string, React.ReactNode> = {
+    client: <Users size={13} />,
+    ppi: <GitBranch size={13} />,
+    visit: <CalendarCheck size={13} />,
+  };
+  const typeBg: Record<string, string> = {
+    client: "bg-blue-50 text-blue-700",
+    ppi: "bg-emerald-50 text-emerald-700",
+    visit: "bg-purple-50 text-purple-700",
+  };
+
+  return (
+    <div ref={wrapperRef} className="relative w-full">
+      <div className="relative">
+        <Search
+          size={16}
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+        />
+        <Input
+          data-ocid="dashboard.search_input"
+          type="text"
+          placeholder="Search clients, PPI entries, visits..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => results.length > 0 && setOpen(true)}
+          className="pl-9 bg-background"
+        />
+      </div>
+      {open && results.length > 0 && (
+        <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-background border border-border rounded-lg shadow-lg overflow-hidden">
+          {results.map((r, i) => (
+            <button
+              // biome-ignore lint/suspicious/noArrayIndexKey: search results
+              key={i}
+              type="button"
+              className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors text-left border-b border-border last:border-0"
+              onClick={() => {
+                setOpen(false);
+                setQuery("");
+                navigate({ to: r.href });
+              }}
+            >
+              <span
+                className={`h-6 w-6 rounded flex items-center justify-center flex-shrink-0 ${typeBg[r.type]}`}
+              >
+                {typeIcons[r.type]}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate text-foreground">
+                  {r.label}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {r.sub}
+                </p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { data: isAdmin, isSuccess: isAdminResolved } = useIsAdmin();
   const { data: profile } = useUserProfile();
@@ -133,7 +303,6 @@ export default function DashboardPage() {
   const { data: pipelineStats, isLoading: pipelineLoading } =
     usePipelineStats();
 
-  // Only fetch the relevant dataset once isAdmin is known — avoids double fetching
   const { data: allClaims } = useAllClaims(isAdminResolved && isAdmin === true);
   const { data: allVisits } = useAllVisits(isAdminResolved && isAdmin === true);
   const { data: myVisits } = useMyVisits(isAdminResolved && isAdmin === false);
@@ -180,6 +349,9 @@ export default function DashboardPage() {
           })}
         </p>
       </div>
+
+      {/* Global Search */}
+      <GlobalSearch />
 
       {/* Quick Actions */}
       <div>

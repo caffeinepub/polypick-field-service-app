@@ -46,6 +46,7 @@ import {
   CalendarCheck,
   CalendarDays,
   CheckCircle2,
+  Clock,
   Copy,
   FileDown,
   FileSpreadsheet,
@@ -398,6 +399,51 @@ export default function VisitsPage() {
   } | null>(null);
   const [capturingCompleteGps, setCapturingCompleteGps] = useState(false);
   const [form, setForm] = useState(emptyForm);
+
+  // ── Check-in / Check-out State ───────────────────────────────────────────────
+  const [checkInMap, setCheckInMap] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(
+        localStorage.getItem("polypick_visit_checkins") ?? "{}",
+      );
+    } catch {
+      return {};
+    }
+  });
+  const [checkOutMap, setCheckOutMap] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(
+        localStorage.getItem("polypick_visit_checkouts") ?? "{}",
+      );
+    } catch {
+      return {};
+    }
+  });
+
+  const handleCheckIn = (visitId: string) => {
+    const now = new Date().toISOString();
+    const updated = { ...checkInMap, [visitId]: now };
+    setCheckInMap(updated);
+    localStorage.setItem("polypick_visit_checkins", JSON.stringify(updated));
+    toast.success("Checked in!");
+  };
+
+  const handleCheckOut = (visitId: string) => {
+    const now = new Date().toISOString();
+    const updated = { ...checkOutMap, [visitId]: now };
+    setCheckOutMap(updated);
+    localStorage.setItem("polypick_visit_checkouts", JSON.stringify(updated));
+    toast.success("Checked out!");
+  };
+
+  const formatDuration = (checkIn: string, checkOut: string) => {
+    const diff = new Date(checkOut).getTime() - new Date(checkIn).getTime();
+    if (diff <= 0) return "—";
+    const h = Math.floor(diff / (1000 * 60 * 60));
+    const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  };
 
   // ── Cancel Visit State ─────────────────────────────────────────────────────
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -1169,6 +1215,41 @@ export default function VisitsPage() {
                             <div className="flex items-center justify-end gap-1">
                               {visit.status === "planned" && (
                                 <>
+                                  {!checkInMap[visit.id.toString()] ? (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      data-ocid={`visits.checkin_button.${idx + 1}`}
+                                      onClick={() =>
+                                        handleCheckIn(visit.id.toString())
+                                      }
+                                      className="h-7 text-xs gap-1 text-blue-700 border-blue-200 hover:bg-blue-50"
+                                    >
+                                      <Clock size={12} />
+                                      Check In
+                                    </Button>
+                                  ) : !checkOutMap[visit.id.toString()] ? (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      data-ocid="visits.checkout_button"
+                                      onClick={() =>
+                                        handleCheckOut(visit.id.toString())
+                                      }
+                                      className="h-7 text-xs gap-1 text-indigo-700 border-indigo-200 hover:bg-indigo-50"
+                                    >
+                                      <Clock size={12} />
+                                      Check Out
+                                    </Button>
+                                  ) : (
+                                    <span className="text-xs text-emerald-700 font-medium flex items-center gap-1">
+                                      <Clock size={11} />
+                                      {formatDuration(
+                                        checkInMap[visit.id.toString()],
+                                        checkOutMap[visit.id.toString()],
+                                      )}
+                                    </span>
+                                  )}
                                   <Button
                                     size="sm"
                                     variant="outline"

@@ -20,6 +20,8 @@ const MarketingReportPage = lazy(() => import("./pages/MarketingReportPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const DailyReportPage = lazy(() => import("./pages/DailyReportPage"));
 const AssistantPage = lazy(() => import("./pages/AssistantPage"));
+const ServiceTicketsPage = lazy(() => import("./pages/ServiceTicketsPage"));
+const TargetsPage = lazy(() => import("./pages/TargetsPage"));
 
 function PageLoader() {
   return (
@@ -140,6 +142,18 @@ const assistantRoute = createRoute({
   component: withSuspense(AssistantPage),
 });
 
+const serviceTicketsRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/service-tickets",
+  component: withSuspense(ServiceTicketsPage),
+});
+
+const targetsRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/targets",
+  component: withSuspense(TargetsPage),
+});
+
 export const routeTree = rootRoute.addChildren([
   loginRoute,
   profileSetupRoute,
@@ -156,5 +170,7 @@ export const routeTree = rootRoute.addChildren([
     profileRoute,
     dailyReportRoute,
     assistantRoute,
+    serviceTicketsRoute,
+    targetsRoute,
   ]),
 ]);

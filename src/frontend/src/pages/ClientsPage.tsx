@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -41,6 +43,7 @@ import type { Principal } from "@icp-sdk/core/principal";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Building2,
+  Calendar,
   Database,
   Download,
   Eye,
@@ -49,6 +52,7 @@ import {
   Plus,
   Search,
   Sheet,
+  Smartphone,
   Trash2,
   Upload,
   Users,
@@ -58,6 +62,7 @@ import { toast } from "sonner";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   type T__2,
+  useAllVisits,
   useClients,
   useCreateClient,
   useDeleteClient,
@@ -293,6 +298,45 @@ function downloadSampleCSV() {
   URL.revokeObjectURL(url);
 }
 
+// ── Phone contact helpers ─────────────────────────────────────────────────────
+
+/** Title-case a single word */
+function toTitleCase(word: string): string {
+  if (!word) return "";
+  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+}
+
+/**
+ * Detect business contact: 3+ words in name.
+ * e.g. "RAJU singh jk cement nimbahera" → business
+ *      "Raju Singh" → personal
+ */
+function detectBusiness(rawName: string): {
+  isBusiness: boolean;
+  personName: string;
+  companyName: string;
+} {
+  const words = rawName.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 3) {
+    const personName = words.slice(0, 2).map(toTitleCase).join(" ");
+    const companyName = words.slice(2).map(toTitleCase).join(" ");
+    return { isBusiness: true, personName, companyName };
+  }
+  return {
+    isBusiness: false,
+    personName: words.map(toTitleCase).join(" "),
+    companyName: "",
+  };
+}
+
+type PhoneContactEntry = {
+  name: string;
+  company: string;
+  phone: string;
+  isBusiness: boolean;
+  include: boolean;
+};
+
 export default function ClientsPage() {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -305,9 +349,25 @@ export default function ClientsPage() {
   const csvInputRef = useRef<HTMLInputElement>(null);
   const excelInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Phone import state ────────────────────────────────────────────────────
+  const [phoneContacts, setPhoneContacts] = useState<PhoneContactEntry[]>([]);
+  const [phoneImportOpen, setPhoneImportOpen] = useState(false);
+  const [isPhoneImporting, setIsPhoneImporting] = useState(false);
+
   const { data: clients, isLoading } = useClients();
   const createClient = useCreateClient();
   const deleteClient = useDeleteClient();
+  const { data: allVisits } = useAllVisits();
+
+  // Compute last visit date per client
+  const lastVisitMap = new Map<string, bigint>();
+  for (const v of allVisits ?? []) {
+    const key = v.clientId.toString();
+    const existing = lastVisitMap.get(key);
+    if (!existing || v.plannedDate > existing) {
+      lastVisitMap.set(key, v.plannedDate);
+    }
+  }
   const navigate = useNavigate();
   const { identity } = useInternetIdentity();
 
@@ -493,6 +553,102 @@ export default function ClientsPage() {
     }
   };
 
+  // ── Phone Contact Picker ──────────────────────────────────────────────────
+
+  const handlePhoneImport = async () => {
+    if (!(navigator as any).contacts) {
+      toast.error("Ye feature sirf Chrome Android mein kaam karta hai");
+      return;
+    }
+    try {
+      const selected = await (navigator as any).contacts.select(
+        ["name", "tel"],
+        { multiple: true },
+      );
+      if (!selected || selected.length === 0) return;
+
+      const parsed: PhoneContactEntry[] = selected.map(
+        (contact: { name?: string[]; tel?: string[] }) => {
+          const rawName = (contact.name?.[0] ?? "").trim();
+          const phone = (contact.tel?.[0] ?? "").replace(/\s+/g, "").trim();
+          const { isBusiness, personName, companyName } =
+            detectBusiness(rawName);
+          return {
+            name: personName,
+            company: companyName,
+            phone,
+            isBusiness,
+            include: isBusiness, // auto-check business, uncheck personal
+          };
+        },
+      );
+
+      setPhoneContacts(parsed);
+      setPhoneImportOpen(true);
+    } catch {
+      toast.error("Contact access cancelled or not supported.");
+    }
+  };
+
+  const handlePhoneImportSubmit = async () => {
+    if (!identity) return;
+    const toImport = phoneContacts.filter((c) => c.include);
+    if (toImport.length === 0) {
+      toast.error("Koi bhi contact select nahi kiya.");
+      return;
+    }
+    // Validate: personal contacts that are manually included must have a company
+    const missingCompany = toImport.filter(
+      (c) => !c.isBusiness && !c.company.trim(),
+    );
+    if (missingCompany.length > 0) {
+      toast.error(
+        `${missingCompany.length} personal contact(s) mein company name bharein.`,
+      );
+      return;
+    }
+    setIsPhoneImporting(true);
+    toast(`Importing ${toImport.length} contacts...`);
+    try {
+      let count = 0;
+      for (const c of toImport) {
+        await createClient.mutateAsync({
+          id: 0n,
+          name: c.name.trim(),
+          company: c.company.trim(),
+          phone: c.phone,
+          email: "",
+          address: "",
+          notes: "",
+          createdAt: BigInt(Date.now()) * 1_000_000n,
+          updatedAt: BigInt(Date.now()) * 1_000_000n,
+          createdBy: identity.getPrincipal() as Principal,
+        });
+        count++;
+      }
+      toast.success(`${count} client${count !== 1 ? "s" : ""} imported!`);
+      setPhoneImportOpen(false);
+      setPhoneContacts([]);
+    } catch {
+      toast.error("Kuch contacts import nahi hue. Please try again.");
+    } finally {
+      setIsPhoneImporting(false);
+    }
+  };
+
+  const selectedCount = phoneContacts.filter((c) => c.include).length;
+  const businessContacts = phoneContacts.filter((c) => c.isBusiness);
+  const personalContacts = phoneContacts.filter((c) => !c.isBusiness);
+
+  const updatePhoneContact = (
+    idx: number,
+    patch: Partial<PhoneContactEntry>,
+  ) => {
+    setPhoneContacts((prev) =>
+      prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)),
+    );
+  };
+
   return (
     <div className="p-6 md:p-8 space-y-6 animate-fade-in">
       {/* Header */}
@@ -570,6 +726,19 @@ export default function ClientsPage() {
               <Sheet size={15} />
             )}
             {isImportingExcel ? "Importing..." : "Import Excel"}
+          </Button>
+
+          {/* Import from Phone */}
+          <Button
+            variant="outline"
+            size="sm"
+            data-ocid="clients.phone_import.button"
+            onClick={handlePhoneImport}
+            disabled={!identity}
+            className="gap-2"
+          >
+            <Smartphone size={15} />
+            Import from Phone
           </Button>
 
           {/* Export PDF */}
@@ -775,6 +944,244 @@ export default function ClientsPage() {
         </div>
       </div>
 
+      {/* Phone Import Review Modal */}
+      <Dialog
+        open={phoneImportOpen}
+        onOpenChange={(o) => {
+          if (!isPhoneImporting) {
+            setPhoneImportOpen(o);
+            if (!o) setPhoneContacts([]);
+          }
+        }}
+      >
+        <DialogContent
+          className="max-w-2xl w-full"
+          data-ocid="clients.phone_import.dialog"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <Smartphone size={18} className="text-primary" />
+              Phone Contacts Import
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Business contacts (3+ words) auto-detected. Review and select
+              which to import.
+            </p>
+          </DialogHeader>
+
+          <ScrollArea className="max-h-[60vh] pr-1">
+            <div className="space-y-5">
+              {/* Business contacts section */}
+              {businessContacts.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200">
+                      ✅ Business Contacts — {businessContacts.length} detected
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {phoneContacts.map((contact, idx) => {
+                      if (!contact.isBusiness) return null;
+                      const displayIdx = idx + 1;
+                      return (
+                        <div
+                          // biome-ignore lint/suspicious/noArrayIndexKey: phone contact list is temporary, no stable ID available
+                          key={`phone-${idx}`}
+                          data-ocid={`clients.phone_contact.item.${displayIdx}`}
+                          className="flex items-start gap-3 p-3 rounded-lg border border-emerald-100 bg-emerald-50/40"
+                        >
+                          <Checkbox
+                            id={`pc-include-${idx}`}
+                            data-ocid={`clients.phone_contact.checkbox.${displayIdx}`}
+                            checked={contact.include}
+                            onCheckedChange={(checked) =>
+                              updatePhoneContact(idx, {
+                                include: Boolean(checked),
+                              })
+                            }
+                            className="mt-1 shrink-0"
+                          />
+                          <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div>
+                              <Label className="text-xs text-muted-foreground mb-1 block">
+                                Person Name
+                              </Label>
+                              <Input
+                                data-ocid={`clients.phone_contact.input.${displayIdx}`}
+                                value={contact.name}
+                                onChange={(e) =>
+                                  updatePhoneContact(idx, {
+                                    name: e.target.value,
+                                  })
+                                }
+                                placeholder="Person name"
+                                className="h-8 text-sm"
+                                disabled={!contact.include}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground mb-1 block">
+                                Company Name
+                              </Label>
+                              <Input
+                                value={contact.company}
+                                onChange={(e) =>
+                                  updatePhoneContact(idx, {
+                                    company: e.target.value,
+                                  })
+                                }
+                                placeholder="Company name"
+                                className="h-8 text-sm"
+                                disabled={!contact.include}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground mb-1 block">
+                                Phone
+                              </Label>
+                              <Input
+                                value={contact.phone}
+                                readOnly
+                                className="h-8 text-sm bg-muted/40"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Personal contacts section */}
+              {personalContacts.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted text-muted-foreground text-xs font-semibold border border-border">
+                      👤 Personal Contacts — {personalContacts.length} (will be
+                      skipped by default)
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {phoneContacts.map((contact, idx) => {
+                      if (contact.isBusiness) return null;
+                      const displayIdx = idx + 1;
+                      return (
+                        <div
+                          // biome-ignore lint/suspicious/noArrayIndexKey: phone contact list is temporary, no stable ID available
+                          key={`phone-p-${idx}`}
+                          data-ocid={`clients.phone_contact.item.${displayIdx}`}
+                          className="flex items-start gap-3 p-3 rounded-lg border border-border bg-muted/20"
+                        >
+                          <Checkbox
+                            id={`pc-personal-${idx}`}
+                            data-ocid={`clients.phone_contact.checkbox.${displayIdx}`}
+                            checked={contact.include}
+                            onCheckedChange={(checked) =>
+                              updatePhoneContact(idx, {
+                                include: Boolean(checked),
+                              })
+                            }
+                            className="mt-1 shrink-0"
+                          />
+                          <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div>
+                              <Label className="text-xs text-muted-foreground mb-1 block">
+                                Name
+                              </Label>
+                              <Input
+                                value={contact.name}
+                                readOnly
+                                className="h-8 text-sm bg-muted/40"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground mb-1 block">
+                                Company Name{" "}
+                                {contact.include && (
+                                  <span className="text-destructive">*</span>
+                                )}
+                              </Label>
+                              <Input
+                                value={contact.company}
+                                onChange={(e) =>
+                                  updatePhoneContact(idx, {
+                                    company: e.target.value,
+                                  })
+                                }
+                                placeholder={
+                                  contact.include ? "Required" : "Optional"
+                                }
+                                className="h-8 text-sm"
+                                disabled={!contact.include}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground mb-1 block">
+                                Phone
+                              </Label>
+                              <Input
+                                value={contact.phone}
+                                readOnly
+                                className="h-8 text-sm bg-muted/40"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {phoneContacts.length === 0 && (
+                <div
+                  data-ocid="clients.phone_import.empty_state"
+                  className="text-center py-8 text-muted-foreground"
+                >
+                  <Smartphone size={32} className="mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">Koi contact nahi mila.</p>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+
+          <DialogFooter className="flex-col sm:flex-row items-center gap-2 pt-2 border-t border-border">
+            <p className="text-sm text-muted-foreground sm:mr-auto">
+              <span className="font-semibold text-foreground">
+                {selectedCount}
+              </span>{" "}
+              contact{selectedCount !== 1 ? "s" : ""} will be imported
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                data-ocid="clients.phone_import.cancel_button"
+                onClick={() => {
+                  setPhoneImportOpen(false);
+                  setPhoneContacts([]);
+                }}
+                disabled={isPhoneImporting}
+              >
+                Cancel
+              </Button>
+              <Button
+                data-ocid="clients.phone_import.submit_button"
+                onClick={handlePhoneImportSubmit}
+                disabled={isPhoneImporting || selectedCount === 0 || !identity}
+              >
+                {isPhoneImporting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                {isPhoneImporting
+                  ? "Importing..."
+                  : `Import ${selectedCount} Client${selectedCount !== 1 ? "s" : ""}`}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Search */}
       <div className="relative max-w-sm">
         <Search
@@ -904,6 +1311,28 @@ export default function ClientsPage() {
                     </TableCell>
                     <TableCell className="hidden lg:table-cell text-muted-foreground">
                       {client.email || "—"}
+                    </TableCell>
+                    <TableCell className="hidden xl:table-cell">
+                      {(() => {
+                        const lastDate = lastVisitMap.get(client.id.toString());
+                        if (!lastDate)
+                          return (
+                            <span className="text-muted-foreground text-xs">
+                              Never visited
+                            </span>
+                          );
+                        const d = new Date(Number(lastDate / 1_000_000n));
+                        return (
+                          <span className="text-xs text-emerald-700 flex items-center gap-1">
+                            <Calendar size={11} />
+                            {d.toLocaleDateString("en-IN", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </span>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       {/* biome-ignore lint/a11y/useKeyWithClickEvents: action cell stop-propagation wrapper */}

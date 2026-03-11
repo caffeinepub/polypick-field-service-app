@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { Principal } from "@icp-sdk/core/principal";
 import {
+  AlertTriangle,
   Camera,
   CheckCircle,
   FileText,
@@ -473,6 +474,21 @@ export default function TaDaPage() {
       0,
     );
 
+  // Monthly limit alert: total claims in current month
+  const MONTHLY_LIMIT = 5000;
+  const thisMonth = new Date().getMonth();
+  const thisYear = new Date().getFullYear();
+  const monthlyTotal = claims
+    .filter((c) => {
+      const d = new Date(Number(c.date / 1_000_000n));
+      return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+    })
+    .reduce(
+      (acc, c) => acc + Number(c.travelAllowance) + Number(c.dailyAllowance),
+      0,
+    );
+  const overMonthlyLimit = !isAdmin && monthlyTotal > MONTHLY_LIMIT;
+
   const renderClaimRow = (claim: T__3, idx: number) => {
     const srText = extractServiceReport(claim.notes);
     const photoUrl = extractPhotoDataUrl(claim.notes);
@@ -632,6 +648,21 @@ export default function TaDaPage() {
           </Button>
         )}
       </div>
+
+      {/* Monthly Limit Alert */}
+      {overMonthlyLimit && (
+        <div
+          data-ocid="tada.monthly_limit.card"
+          className="flex items-center gap-3 px-4 py-3 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm font-medium"
+        >
+          <AlertTriangle size={16} className="flex-shrink-0" />
+          <span>
+            Monthly claim total ₹{monthlyTotal.toLocaleString("en-IN")} exceeds
+            ₹{MONTHLY_LIMIT.toLocaleString("en-IN")} limit — please review
+            before submitting more claims.
+          </span>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">

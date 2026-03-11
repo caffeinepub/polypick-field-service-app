@@ -44,6 +44,7 @@ import {
   Phone,
   Plus,
   Smartphone,
+  Swords,
   Trash2,
   User,
   Users,
@@ -105,6 +106,39 @@ const emptyContactForm = {
   email: "",
 };
 
+// ── Competitor Tracking ────────────────────────────────────────────────────
+interface Competitor {
+  id: string;
+  companyName: string;
+  product: string;
+  notes: string;
+  dateAdded: string;
+}
+
+function useCompetitors(clientId: string) {
+  const key = `polypick_competitors_${clientId}`;
+  const [competitors, setCompetitors] = useState<Competitor[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(key) ?? "[]");
+    } catch {
+      return [];
+    }
+  });
+
+  const save = (next: Competitor[]) => {
+    setCompetitors(next);
+    localStorage.setItem(key, JSON.stringify(next));
+  };
+
+  const add = (c: Omit<Competitor, "id">) => {
+    save([...competitors, { ...c, id: String(Date.now()) }]);
+  };
+
+  const remove = (id: string) => save(competitors.filter((c) => c.id !== id));
+
+  return { competitors, add, remove };
+}
+
 export default function ClientDetailPage() {
   const { id } = useParams({ from: "/layout/clients/$id" });
   const navigate = useNavigate();
@@ -151,6 +185,33 @@ export default function ClientDetailPage() {
       seniority: string;
     }>
   >([]);
+
+  // ── Competitors state ──────────────────────────────────────────────────────
+  const {
+    competitors,
+    add: addCompetitor,
+    remove: removeCompetitor,
+  } = useCompetitors(id);
+  const [addCompetitorOpen, setAddCompetitorOpen] = useState(false);
+  const [competitorForm, setCompetitorForm] = useState({
+    companyName: "",
+    product: "",
+    notes: "",
+    dateAdded: new Date().toISOString().slice(0, 10),
+  });
+
+  const handleAddCompetitor = () => {
+    if (!competitorForm.companyName.trim()) return;
+    addCompetitor(competitorForm);
+    setCompetitorForm({
+      companyName: "",
+      product: "",
+      notes: "",
+      dateAdded: new Date().toISOString().slice(0, 10),
+    });
+    setAddCompetitorOpen(false);
+    toast.success("Competitor added!");
+  };
 
   // Sync contacts from client notes whenever client loads/changes
   useEffect(() => {
@@ -492,6 +553,22 @@ export default function ClientDetailPage() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger
+            value="competitors"
+            data-ocid="client.competitors.tab"
+            className="gap-2"
+          >
+            <Swords size={14} />
+            Competitors
+            {competitors.length > 0 && (
+              <Badge
+                variant="secondary"
+                className="ml-1 h-5 min-w-5 px-1 text-xs"
+              >
+                {competitors.length}
+              </Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         {/* ── Contacts Tab ──────────────────────────────────────────────────── */}
@@ -743,6 +820,155 @@ export default function ClientDetailPage() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* ── Competitors Tab ───────────────────────────────────────────────── */}
+        <TabsContent
+          value="competitors"
+          className="space-y-4"
+          data-ocid="client.competitors.panel"
+        >
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-lg font-semibold text-foreground">
+              Competitors ({competitors.length})
+            </h2>
+            <Button
+              size="sm"
+              data-ocid="client.competitor.add_button"
+              onClick={() => setAddCompetitorOpen(true)}
+              className="gap-2"
+            >
+              <Plus size={14} />
+              Add
+            </Button>
+          </div>
+
+          {competitors.length === 0 ? (
+            <Card>
+              <CardContent
+                data-ocid="client.competitors.empty_state"
+                className="py-12 text-center text-muted-foreground"
+              >
+                <Swords size={36} className="mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Koi competitor add nahi kiya</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {competitors.map((c, idx) => (
+                <Card
+                  key={c.id}
+                  data-ocid={`client.competitor.item.${idx + 1}`}
+                >
+                  <CardContent className="pt-4 pb-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-sm text-foreground">
+                          {c.companyName}
+                        </p>
+                        {c.product && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Product: {c.product}
+                          </p>
+                        )}
+                        {c.notes && (
+                          <p className="text-xs text-muted-foreground mt-1 italic">
+                            {c.notes}
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Added: {c.dateAdded}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive hover:text-destructive shrink-0"
+                        onClick={() => removeCompetitor(c.id)}
+                        data-ocid={`client.competitor.delete_button.${idx + 1}`}
+                      >
+                        <Trash2 size={13} />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {/* Add Competitor Dialog */}
+          <Dialog open={addCompetitorOpen} onOpenChange={setAddCompetitorOpen}>
+            <DialogContent
+              className="max-w-sm"
+              data-ocid="client.competitor.add.dialog"
+            >
+              <DialogHeader>
+                <DialogTitle className="font-display">
+                  Competitor Add Karein
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 mt-2">
+                <div className="space-y-1.5">
+                  <Label>Company Name *</Label>
+                  <Input
+                    placeholder="Competitor company name"
+                    value={competitorForm.companyName}
+                    onChange={(e) =>
+                      setCompetitorForm((p) => ({
+                        ...p,
+                        companyName: e.target.value,
+                      }))
+                    }
+                    data-ocid="client.competitor.company.input"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Product / Category</Label>
+                  <Input
+                    placeholder="Kaunsa product/category"
+                    value={competitorForm.product}
+                    onChange={(e) =>
+                      setCompetitorForm((p) => ({
+                        ...p,
+                        product: e.target.value,
+                      }))
+                    }
+                    data-ocid="client.competitor.product.input"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Notes</Label>
+                  <Textarea
+                    placeholder="Additional notes..."
+                    rows={2}
+                    value={competitorForm.notes}
+                    onChange={(e) =>
+                      setCompetitorForm((p) => ({
+                        ...p,
+                        notes: e.target.value,
+                      }))
+                    }
+                    data-ocid="client.competitor.notes.textarea"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setAddCompetitorOpen(false)}
+                  data-ocid="client.competitor.add.cancel_button"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleAddCompetitor}
+                  data-ocid="client.competitor.add.submit_button"
+                >
+                  Add
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
       </Tabs>
 

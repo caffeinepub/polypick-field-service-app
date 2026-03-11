@@ -1,19 +1,26 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Principal } from "@icp-sdk/core/principal";
 import {
   Briefcase,
   CalendarDays,
   Camera,
+  Info,
   LogOut,
   Mail,
+  Moon,
   Shield,
   User,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { UserRole } from "../backend.d";
+import { useDarkMode } from "../hooks/useDarkMode";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
-import { useIsAdmin, useUserProfile } from "../hooks/useQueries";
+import { useAssignRole, useIsAdmin, useUserProfile } from "../hooks/useQueries";
 import {
   compressImage,
   getProfilePhoto,
@@ -23,8 +30,10 @@ import {
 export default function ProfilePage() {
   const { identity, clear } = useInternetIdentity();
   const { data: profile } = useUserProfile();
-  const { data: isAdmin } = useIsAdmin();
+  const { data: isAdmin, refetch: refetchAdmin } = useIsAdmin();
+  const assignRole = useAssignRole();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { isDark, setIsDark } = useDarkMode();
 
   const principal = identity?.getPrincipal().toString() ?? "";
 
@@ -52,6 +61,22 @@ export default function ProfilePage() {
     },
     [principal],
   );
+
+  const handleClaimAdmin = async () => {
+    if (!principal) return;
+    try {
+      await assignRole.mutateAsync({
+        user: Principal.fromText(principal),
+        role: UserRole.admin,
+      });
+      await refetchAdmin();
+      toast.success("Admin access granted! Please refresh the page.");
+      // reload to update sidebar
+      setTimeout(() => window.location.reload(), 1200);
+    } catch {
+      toast.error("Admin access claim failed. Contact system administrator.");
+    }
+  };
 
   const createdAt = profile?.createdAt
     ? new Date(Number(profile.createdAt / 1_000_000n)).toLocaleDateString(
@@ -198,6 +223,66 @@ export default function ProfilePage() {
         </CardContent>
       </Card>
 
+      {/* Admin Access Claim -- shown only when not admin */}
+      {!isAdmin && (
+        <Card className="border-amber-200 bg-amber-50/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="font-display text-base flex items-center gap-2 text-amber-800">
+              <Shield size={16} className="text-amber-600" />
+              Admin Access
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-amber-700">
+              Agar aap is app ke Admin hain, to neeche button se Admin access le
+              sakte hain.
+            </p>
+            <Button
+              data-ocid="profile.claim_admin.button"
+              onClick={handleClaimAdmin}
+              disabled={assignRole.isPending}
+              className="w-full gap-2 bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              <Shield size={16} />
+              {assignRole.isPending ? "Processing..." : "Admin Access Lein"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Preferences */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="font-display text-base">Preferences</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-md bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                <Moon size={16} className="text-indigo-600" />
+              </div>
+              <div>
+                <Label
+                  htmlFor="dark-mode-switch"
+                  className="text-sm font-medium text-foreground cursor-pointer"
+                >
+                  Dark Mode
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Switch to dark theme
+                </p>
+              </div>
+            </div>
+            <Switch
+              id="dark-mode-switch"
+              data-ocid="profile.dark_mode.switch"
+              checked={isDark}
+              onCheckedChange={setIsDark}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       <Button
         variant="outline"
         className="w-full gap-2 text-destructive border-destructive/30 hover:bg-destructive/5 hover:text-destructive"
@@ -207,6 +292,32 @@ export default function ProfilePage() {
         <LogOut size={16} />
         Sign Out
       </Button>
+
+      {/* App Version Info */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="font-display text-base flex items-center gap-2">
+            <Info size={16} className="text-muted-foreground" />
+            App Information
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-muted-foreground">App Version</span>
+            <span className="font-medium text-foreground">v26.0</span>
+          </div>
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-muted-foreground">Last Updated</span>
+            <span className="font-medium text-foreground">March 2026</span>
+          </div>
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-muted-foreground">Platform</span>
+            <span className="font-medium text-foreground">
+              Polypick Field Service
+            </span>
+          </div>
+        </CardContent>
+      </Card>
 
       <footer className="pt-2 border-t border-border">
         <p className="text-xs text-muted-foreground text-center">

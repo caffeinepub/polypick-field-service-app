@@ -249,6 +249,20 @@ export default function InteractionsPage() {
       );
     });
 
+  // Inactivity: entries not updated in 15+ days
+  const INACTIVE_DAYS = 15;
+  const inactiveIds = new Set(
+    allInteractions
+      .filter((i) => {
+        if (!i.updatedAt) return false;
+        const updated = new Date(Number(i.updatedAt / 1_000_000n));
+        const diffDays =
+          (Date.now() - updated.getTime()) / (1000 * 60 * 60 * 24);
+        return diffDays >= INACTIVE_DAYS;
+      })
+      .map((i) => i.id.toString()),
+  );
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!identity || !form.clientId) return;
@@ -585,6 +599,18 @@ export default function InteractionsPage() {
         />
       </div>
 
+      {/* Inactivity Warning Banner */}
+      {inactiveIds.size > 0 && (
+        <div
+          data-ocid="interactions.inactivity.card"
+          className="flex items-center gap-2 px-4 py-3 rounded-lg bg-orange-50 border border-orange-200 text-orange-800 text-sm font-medium"
+        >
+          <span className="inline-block h-2 w-2 rounded-full bg-orange-500 animate-pulse flex-shrink-0" />
+          {inactiveIds.size} PPI entr{inactiveIds.size !== 1 ? "ies" : "y"}{" "}
+          inactive for 15+ days — follow-up needed
+        </div>
+      )}
+
       {/* Tabs + Table */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList
@@ -701,7 +727,14 @@ export default function InteractionsPage() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <StatusBadge status={int.status} />
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <StatusBadge status={int.status} />
+                              {inactiveIds.has(int.id.toString()) && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-200">
+                                  Inactive 15+ days
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="hidden sm:table-cell">
                             {priority !== "none" ? (

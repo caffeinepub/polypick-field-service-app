@@ -25,9 +25,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Principal } from "@icp-sdk/core/principal";
 import { useNavigate } from "@tanstack/react-router";
-import { Loader2, Shield, User, UserCog, UserPlus } from "lucide-react";
+import {
+  BarChart3,
+  Loader2,
+  Shield,
+  User,
+  UserCog,
+  UserPlus,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { UserRole } from "../backend.d";
@@ -55,6 +63,7 @@ export default function StaffPage() {
   const assignRole = useAssignRole();
 
   const [assignOpen, setAssignOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
   const [principalInput, setPrincipalInput] = useState("");
   const [roleInput, setRoleInput] = useState<UserRole>(UserRole.user);
 
@@ -97,6 +106,29 @@ export default function StaffPage() {
   const staffList = Object.values(staffMap);
   const isLoading = visitsLoading || claimsLoading;
 
+  // Performance: reports submitted this month per principal
+  const reportsCountMap = (() => {
+    try {
+      const now = new Date();
+      const thisMonth = now.getMonth();
+      const thisYear = now.getFullYear();
+      const raw = localStorage.getItem("daily_reports");
+      const reports: Array<{ principalId: string; submittedAt: string }> = raw
+        ? JSON.parse(raw)
+        : [];
+      const map: Record<string, number> = {};
+      for (const r of reports) {
+        const d = new Date(r.submittedAt);
+        if (d.getMonth() === thisMonth && d.getFullYear() === thisYear) {
+          map[r.principalId] = (map[r.principalId] ?? 0) + 1;
+        }
+      }
+      return map;
+    } catch {
+      return {} as Record<string, number>;
+    }
+  })();
+
   const handleAssign = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!principalInput.trim()) return;
@@ -135,89 +167,199 @@ export default function StaffPage() {
         </Button>
       </div>
 
-      {/* Staff Table */}
-      <div className="rounded-lg border border-border overflow-hidden shadow-xs">
-        <Table data-ocid="staff.table">
-          <TableHeader>
-            <TableRow className="bg-muted/30">
-              <TableHead className="font-semibold">#</TableHead>
-              <TableHead className="font-semibold">Principal ID</TableHead>
-              <TableHead className="font-semibold text-center">
-                Visits
-              </TableHead>
-              <TableHead className="font-semibold text-center">
-                Claims
-              </TableHead>
-              <TableHead className="font-semibold text-right">
-                Approved (₹)
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 4 }).map((_, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: skeleton loader
-                <TableRow key={`skeleton-${i}`}>
-                  {Array.from({ length: 5 }).map((__, j) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: skeleton loader
-                    <TableCell key={`cell-${j}`}>
-                      <Skeleton className="h-4 w-full" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : staffList.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={5}
-                  data-ocid="staff.empty_state"
-                  className="text-center py-12 text-muted-foreground"
-                >
-                  <UserCog size={36} className="mx-auto mb-2 opacity-30" />
-                  <p className="text-sm">No staff activity recorded yet</p>
-                </TableCell>
-              </TableRow>
-            ) : (
-              staffList.map((staff, idx) => (
-                <TableRow
-                  key={staff.principal}
-                  data-ocid={`staff.item.${idx + 1}`}
-                  className="hover:bg-muted/20"
-                >
-                  <TableCell className="text-muted-foreground text-sm">
-                    {idx + 1}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
-                        <User size={14} className="text-primary" />
-                      </div>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {staff.principal.slice(0, 20)}…
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Badge variant="secondary" className="text-xs">
-                      {staff.visitCount}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Badge variant="secondary" className="text-xs">
-                      {staff.claimCount}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-medium text-emerald-700">
-                    ₹{staff.approvedAmount.toLocaleString("en-IN")}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="performance" data-ocid="staff.performance_tab">
+            <BarChart3 size={14} className="mr-1.5" />
+            Performance
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Assign Role Dialog */}
+        <TabsContent value="overview">
+          {/* Staff Table */}
+          <div className="rounded-lg border border-border overflow-hidden shadow-xs mt-4">
+            <Table data-ocid="staff.table">
+              <TableHeader>
+                <TableRow className="bg-muted/30">
+                  <TableHead className="font-semibold">#</TableHead>
+                  <TableHead className="font-semibold">Principal ID</TableHead>
+                  <TableHead className="font-semibold text-center">
+                    Visits
+                  </TableHead>
+                  <TableHead className="font-semibold text-center">
+                    Claims
+                  </TableHead>
+                  <TableHead className="font-semibold text-right">
+                    Approved (₹)
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: skeleton loader
+                    <TableRow key={`skeleton-${i}`}>
+                      {Array.from({ length: 5 }).map((__, j) => (
+                        // biome-ignore lint/suspicious/noArrayIndexKey: skeleton loader
+                        <TableCell key={`cell-${j}`}>
+                          <Skeleton className="h-4 w-full" />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : staffList.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      data-ocid="staff.empty_state"
+                      className="text-center py-12 text-muted-foreground"
+                    >
+                      <UserCog size={36} className="mx-auto mb-2 opacity-30" />
+                      <p className="text-sm">No staff activity recorded yet</p>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  staffList.map((staff, idx) => (
+                    <TableRow
+                      key={staff.principal}
+                      data-ocid={`staff.item.${idx + 1}`}
+                      className="hover:bg-muted/20"
+                    >
+                      <TableCell className="text-muted-foreground text-sm">
+                        {idx + 1}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
+                            <User size={14} className="text-primary" />
+                          </div>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {staff.principal.slice(0, 20)}…
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="secondary" className="text-xs">
+                          {staff.visitCount}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="secondary" className="text-xs">
+                          {staff.claimCount}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-medium text-emerald-700">
+                        ₹{staff.approvedAmount.toLocaleString("en-IN")}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="performance">
+          <div className="rounded-lg border border-border overflow-hidden shadow-xs mt-4">
+            <Table data-ocid="staff.performance.table">
+              <TableHeader>
+                <TableRow className="bg-muted/30">
+                  <TableHead className="font-semibold">#</TableHead>
+                  <TableHead className="font-semibold">Principal ID</TableHead>
+                  <TableHead className="font-semibold text-center">
+                    Visits (All)
+                  </TableHead>
+                  <TableHead className="font-semibold text-center">
+                    Claims (All)
+                  </TableHead>
+                  <TableHead className="font-semibold text-center">
+                    Reports (This Month)
+                  </TableHead>
+                  <TableHead className="font-semibold text-right">
+                    Approved (₹)
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: skeleton loader
+                    <TableRow key={`perf-skeleton-${i}`}>
+                      {Array.from({ length: 6 }).map((__, j) => (
+                        // biome-ignore lint/suspicious/noArrayIndexKey: skeleton loader
+                        <TableCell key={`perf-cell-${j}`}>
+                          <Skeleton className="h-4 w-full" />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : staffList.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={6}
+                      className="text-center py-10 text-muted-foreground"
+                    >
+                      <BarChart3
+                        size={36}
+                        className="mx-auto mb-2 opacity-30"
+                      />
+                      <p className="text-sm">No performance data yet</p>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  staffList.map((staff, idx) => (
+                    <TableRow
+                      key={`perf-${staff.principal}`}
+                      data-ocid={`staff.performance.item.${idx + 1}`}
+                      className="hover:bg-muted/20"
+                    >
+                      <TableCell className="text-muted-foreground text-sm">
+                        {idx + 1}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
+                            <User size={14} className="text-primary" />
+                          </div>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {staff.principal.slice(0, 20)}…
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="secondary" className="text-xs">
+                          {staff.visitCount}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="secondary" className="text-xs">
+                          {staff.claimCount}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge
+                          variant={
+                            reportsCountMap[staff.principal] > 0
+                              ? "default"
+                              : "secondary"
+                          }
+                          className="text-xs"
+                        >
+                          {reportsCountMap[staff.principal] ?? 0}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-medium text-emerald-700">
+                        ₹{staff.approvedAmount.toLocaleString("en-IN")}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+      </Tabs>
       <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
         <DialogContent className="max-w-md" data-ocid="staff.assign.dialog">
           <DialogHeader>

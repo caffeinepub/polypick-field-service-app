@@ -4,8 +4,12 @@ import { useEffect } from "react";
 import BottomNav from "../components/BottomNav";
 import Sidebar from "../components/Sidebar";
 import { useActor } from "../hooks/useActor";
+import { initDarkMode } from "../hooks/useDarkMode";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useIsAdmin, useUserProfile } from "../hooks/useQueries";
+
+// Initialize dark mode immediately on module load
+initDarkMode();
 
 export default function RootLayout() {
   const navigate = useNavigate();

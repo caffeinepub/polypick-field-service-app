@@ -11,14 +11,17 @@ import {
   AlertCircle,
   Bell,
   Bot,
+  Cake,
   Calendar,
   CheckCircle2,
   ChevronRight,
   ClipboardList,
+  CreditCard,
   FileText,
   GitBranch,
   MapPin,
   PenLine,
+  Plus,
   Receipt,
   Search,
   Star,
@@ -53,6 +56,24 @@ interface FollowUp {
   dueDate: string;
   note: string;
   done: boolean;
+}
+
+interface Payment {
+  id: string;
+  clientName: string;
+  invoiceNo: string;
+  amount: number;
+  dueDate: string;
+  note: string;
+  paid: boolean;
+}
+
+interface Birthday {
+  id: string;
+  name: string;
+  date: string; // MM-DD
+  type: "Birthday" | "Anniversary";
+  note: string;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -248,6 +269,66 @@ function useFollowUps() {
   return { followups, add, toggle, remove };
 }
 
+function usePayments() {
+  const [payments, setPayments] = useState<Payment[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("polypick_payments") ?? "[]");
+    } catch {
+      return [];
+    }
+  });
+
+  const save = (next: Payment[]) => {
+    setPayments(next);
+    localStorage.setItem("polypick_payments", JSON.stringify(next));
+  };
+
+  const add = (p: Omit<Payment, "id" | "paid">) => {
+    save([...payments, { ...p, id: Date.now().toString(), paid: false }]);
+  };
+
+  const togglePaid = (id: string) =>
+    save(payments.map((p) => (p.id === id ? { ...p, paid: !p.paid } : p)));
+  const remove = (id: string) => save(payments.filter((p) => p.id !== id));
+
+  return { payments, add, togglePaid, remove };
+}
+
+function useBirthdays() {
+  const [birthdays, setBirthdays] = useState<Birthday[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("polypick_birthdays") ?? "[]");
+    } catch {
+      return [];
+    }
+  });
+
+  const save = (next: Birthday[]) => {
+    setBirthdays(next);
+    localStorage.setItem("polypick_birthdays", JSON.stringify(next));
+  };
+
+  const add = (b: Omit<Birthday, "id">) => {
+    save([...birthdays, { ...b, id: Date.now().toString() }]);
+  };
+  const remove = (id: string) => save(birthdays.filter((b) => b.id !== id));
+
+  return { birthdays, add, remove };
+}
+
+function getDaysUntil(mmdd: string): number {
+  const now = new Date();
+  const [mm, dd] = mmdd.split("-").map(Number);
+  let next = new Date(now.getFullYear(), mm - 1, dd);
+  if (next < now) next = new Date(now.getFullYear() + 1, mm - 1, dd);
+  return Math.round((next.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function isPaymentOverdue(dueDate: string): boolean {
+  if (!dueDate) return false;
+  return new Date(dueDate) < new Date();
+}
+
 // ── Main Component ───────────────────────────────────────────────────────────
 export default function AssistantPage() {
   const navigate = useNavigate();
@@ -296,6 +377,16 @@ export default function AssistantPage() {
 
   const inquiryCount = Number(pipelineStats?.inquiry ?? 0);
 
+  // Birthdays for reminders (must be before reminders useMemo)
+  const { birthdays: birthdaysForReminders } = useBirthdays();
+  const upcomingBirthdays = useMemo(
+    () =>
+      birthdaysForReminders
+        .filter((b) => getDaysUntil(b.date) <= 7)
+        .sort((a, b_) => getDaysUntil(a.date) - getDaysUntil(b_.date)),
+    [birthdaysForReminders],
+  );
+
   // Smart reminders
   const reminders = useMemo(() => {
     const list: {
@@ -341,8 +432,20 @@ export default function AssistantPage() {
         color: "text-orange-600 bg-orange-50 border-orange-200",
       });
     }
+    // Birthday/Anniversary alerts
+    for (const b of upcomingBirthdays) {
+      const days = getDaysUntil(b.date);
+      const label = days === 0 ? "Aaj!" : `${days} din mein`;
+      list.push({
+        id: `birthday-${b.id}`,
+        text: `${b.type}: ${b.name} — ${label}`,
+        path: "/assistant",
+        icon: Cake,
+        color: "text-pink-600 bg-pink-50 border-pink-200",
+      });
+    }
     return list;
-  }, [pendingClaims, todayVisits, inquiryCount, isMonthEnd]);
+  }, [pendingClaims, todayVisits, inquiryCount, isMonthEnd, upcomingBirthdays]);
 
   // Quick commands
   const [query, setQuery] = useState("");
@@ -356,6 +459,53 @@ export default function AssistantPage() {
           c.label.toLowerCase().includes(q)),
     );
   }, [query, isAdmin]);
+
+  // Payments
+  const {
+    payments,
+    add: addPayment,
+    togglePaid,
+    remove: removePayment,
+  } = usePayments();
+  const [payForm, setPayForm] = useState({
+    clientName: "",
+    invoiceNo: "",
+    amount: "",
+    dueDate: "",
+    note: "",
+  });
+  const handleAddPayment = useCallback(() => {
+    if (!payForm.clientName.trim() || !payForm.amount) return;
+    addPayment({
+      clientName: payForm.clientName,
+      invoiceNo: payForm.invoiceNo,
+      amount: Number(payForm.amount),
+      dueDate: payForm.dueDate,
+      note: payForm.note,
+    });
+    setPayForm({
+      clientName: "",
+      invoiceNo: "",
+      amount: "",
+      dueDate: "",
+      note: "",
+    });
+  }, [payForm, addPayment]);
+
+  // Birthdays (hook already called above for reminders; reuse birthdaysForReminders)
+  const birthdays = birthdaysForReminders;
+  const { add: addBirthday, remove: removeBirthday } = useBirthdays();
+  const [bdForm, setBdForm] = useState({
+    name: "",
+    date: "",
+    type: "Birthday" as Birthday["type"],
+    note: "",
+  });
+  const handleAddBirthday = useCallback(() => {
+    if (!bdForm.name.trim() || !bdForm.date) return;
+    addBirthday(bdForm);
+    setBdForm({ name: "", date: "", type: "Birthday", note: "" });
+  }, [bdForm, addBirthday]);
 
   // To-Do
   const {
@@ -568,7 +718,7 @@ export default function AssistantPage() {
 
         {/* Tabs: Todo / Notes / Follow-ups / Summary */}
         <Tabs defaultValue="todo" data-ocid="assistant.main.tab">
-          <TabsList className="grid grid-cols-4 w-full h-auto">
+          <TabsList className="grid grid-cols-5 w-full h-auto">
             <TabsTrigger
               value="todo"
               className="text-xs py-2"
@@ -603,6 +753,24 @@ export default function AssistantPage() {
                   {
                     followups.filter((f) => !f.done && isOverdue(f.dueDate))
                       .length
+                  }
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger
+              value="payment"
+              className="text-xs py-2"
+              data-ocid="assistant.payment.tab"
+            >
+              <CreditCard size={13} className="mr-1" />
+              Payment
+              {payments.filter((p) => !p.paid && isPaymentOverdue(p.dueDate))
+                .length > 0 && (
+                <span className="ml-1 bg-destructive text-destructive-foreground text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                  {
+                    payments.filter(
+                      (p) => !p.paid && isPaymentOverdue(p.dueDate),
+                    ).length
                   }
                 </span>
               )}
@@ -890,6 +1058,173 @@ export default function AssistantPage() {
             </Card>
           </TabsContent>
 
+          {/* Payment Follow-up Tab */}
+          <TabsContent
+            value="payment"
+            className="mt-3"
+            data-ocid="assistant.payment.panel"
+          >
+            <Card>
+              <CardHeader className="pb-2 pt-4 px-4">
+                <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <CreditCard size={16} className="text-primary" />
+                  Payment Follow-up Tracker
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-3">
+                {/* Add Payment Form */}
+                <div className="bg-muted/40 rounded-xl p-3 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      placeholder="Client naam"
+                      value={payForm.clientName}
+                      onChange={(e) =>
+                        setPayForm((p) => ({
+                          ...p,
+                          clientName: e.target.value,
+                        }))
+                      }
+                      className="h-8 text-xs"
+                      data-ocid="payment.client.input"
+                    />
+                    <Input
+                      placeholder="Invoice No."
+                      value={payForm.invoiceNo}
+                      onChange={(e) =>
+                        setPayForm((p) => ({ ...p, invoiceNo: e.target.value }))
+                      }
+                      className="h-8 text-xs"
+                      data-ocid="payment.invoice.input"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      type="number"
+                      placeholder="Amount (₹)"
+                      value={payForm.amount}
+                      onChange={(e) =>
+                        setPayForm((p) => ({ ...p, amount: e.target.value }))
+                      }
+                      className="h-8 text-xs"
+                      data-ocid="payment.amount.input"
+                    />
+                    <Input
+                      type="date"
+                      value={payForm.dueDate}
+                      onChange={(e) =>
+                        setPayForm((p) => ({ ...p, dueDate: e.target.value }))
+                      }
+                      className="h-8 text-xs"
+                      data-ocid="payment.due_date.input"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Note"
+                      value={payForm.note}
+                      onChange={(e) =>
+                        setPayForm((p) => ({ ...p, note: e.target.value }))
+                      }
+                      className="h-8 text-xs flex-1"
+                      data-ocid="payment.note.input"
+                    />
+                    <Button
+                      size="sm"
+                      className="h-8 px-3 text-xs gap-1"
+                      onClick={handleAddPayment}
+                      data-ocid="payment.add_button"
+                    >
+                      <Plus size={12} />
+                      Add
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Payment List */}
+                {payments.length === 0 ? (
+                  <div
+                    className="py-8 text-center text-muted-foreground text-sm"
+                    data-ocid="payment.empty_state"
+                  >
+                    <CreditCard size={28} className="mx-auto mb-2 opacity-20" />
+                    <p>Koi payment entry nahi hai</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {payments.map((p, idx) => {
+                      const overdue = !p.paid && isPaymentOverdue(p.dueDate);
+                      return (
+                        <div
+                          key={p.id}
+                          data-ocid={`payment.item.${idx + 1}`}
+                          className={`flex items-start gap-2 p-2.5 rounded-lg border text-sm ${
+                            p.paid
+                              ? "border-border bg-muted/30 opacity-60"
+                              : overdue
+                                ? "border-red-200 bg-red-50"
+                                : "border-border bg-card"
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => togglePaid(p.id)}
+                            data-ocid={`payment.toggle.${idx + 1}`}
+                            className={`mt-0.5 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                              p.paid
+                                ? "bg-green-500 border-green-500 text-white"
+                                : "border-muted-foreground"
+                            }`}
+                          >
+                            {p.paid && <CheckCircle2 size={10} />}
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-xs">
+                                {p.clientName}
+                              </span>
+                              {p.invoiceNo && (
+                                <span className="text-xs text-muted-foreground">
+                                  {p.invoiceNo}
+                                </span>
+                              )}
+                              {overdue && (
+                                <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-semibold">
+                                  Overdue
+                                </span>
+                              )}
+                              {p.paid && (
+                                <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold">
+                                  Paid ✓
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                              <span className="font-bold text-foreground">
+                                ₹{p.amount.toLocaleString("en-IN")}
+                              </span>
+                              {p.dueDate && <span>Due: {p.dueDate}</span>}
+                              {p.note && (
+                                <span className="italic">{p.note}</span>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removePayment(p.id)}
+                            data-ocid={`payment.delete_button.${idx + 1}`}
+                            className="text-muted-foreground hover:text-destructive p-0.5 flex-shrink-0"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* Monthly Summary Tab */}
           <TabsContent
             value="summary"
@@ -1024,6 +1359,134 @@ export default function AssistantPage() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Birthday / Anniversary Reminders Manager */}
+        <div className="mt-4" data-ocid="birthday.section">
+          <div className="flex items-center gap-2 mb-3">
+            <Cake size={15} className="text-pink-500" />
+            <h3 className="text-sm font-semibold text-foreground">
+              Birthday &amp; Anniversary Reminders
+            </h3>
+            <Badge variant="secondary" className="ml-auto text-[10px]">
+              {birthdays.length}
+            </Badge>
+          </div>
+
+          {/* Add Form */}
+          <div className="bg-muted/40 rounded-xl p-3 space-y-2 mb-3">
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                placeholder="Naam"
+                value={bdForm.name}
+                onChange={(e) =>
+                  setBdForm((p) => ({ ...p, name: e.target.value }))
+                }
+                className="h-8 text-xs"
+                data-ocid="birthday.name.input"
+              />
+              <select
+                value={bdForm.type}
+                onChange={(e) =>
+                  setBdForm((p) => ({
+                    ...p,
+                    type: e.target.value as Birthday["type"],
+                  }))
+                }
+                className="h-8 text-xs rounded-md border border-input bg-background px-2"
+                data-ocid="birthday.type.select"
+              >
+                <option value="Birthday">Birthday</option>
+                <option value="Anniversary">Anniversary</option>
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1 space-y-0.5">
+                <p className="text-[10px] text-muted-foreground">
+                  Date (MM-DD)
+                </p>
+                <Input
+                  placeholder="MM-DD (e.g. 03-15)"
+                  value={bdForm.date}
+                  onChange={(e) =>
+                    setBdForm((p) => ({ ...p, date: e.target.value }))
+                  }
+                  className="h-8 text-xs"
+                  data-ocid="birthday.date.input"
+                />
+              </div>
+              <Button
+                size="sm"
+                className="h-8 px-3 text-xs gap-1 self-end"
+                onClick={handleAddBirthday}
+                data-ocid="birthday.add_button"
+              >
+                <Plus size={12} />
+                Add
+              </Button>
+            </div>
+          </div>
+
+          {/* Birthdays List */}
+          {birthdays.length === 0 ? (
+            <div
+              className="py-6 text-center text-muted-foreground text-sm"
+              data-ocid="birthday.empty_state"
+            >
+              <Cake size={24} className="mx-auto mb-1 opacity-20" />
+              <p>Koi birthday/anniversary add nahi kiya</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {birthdays.map((b, idx) => {
+                const days = getDaysUntil(b.date);
+                const isToday0 = days === 0;
+                return (
+                  <div
+                    key={b.id}
+                    data-ocid={`birthday.item.${idx + 1}`}
+                    className={`flex items-center gap-3 p-2.5 rounded-lg border text-sm ${
+                      isToday0
+                        ? "border-pink-200 bg-pink-50"
+                        : "border-border bg-card"
+                    }`}
+                  >
+                    <Cake
+                      size={16}
+                      className={
+                        isToday0 ? "text-pink-500" : "text-muted-foreground"
+                      }
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-xs">{b.name}</span>
+                        <Badge className="bg-pink-100 text-pink-700 border-0 text-[10px]">
+                          {b.type}
+                        </Badge>
+                        {isToday0 && (
+                          <Badge className="bg-pink-500 text-white border-0 text-[10px]">
+                            Aaj! 🎉
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {b.date} {days > 0 ? `— ${days} din mein` : ""}
+                        {b.note && ` — ${b.note}`}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeBirthday(b.id)}
+                      data-ocid={`birthday.delete_button.${idx + 1}`}
+                      className="text-muted-foreground hover:text-destructive p-0.5 flex-shrink-0"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

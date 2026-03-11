@@ -6,10 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ChevronDown,
   ChevronUp,
   ClipboardList,
+  ExternalLink,
   FileDown,
   FileText,
   Loader2,
@@ -147,6 +149,7 @@ function ReportCard({
   index: number;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const navigate = useNavigate();
 
   const linkedNames = report.linkedClientIds
     .map((id) => clientMap.get(id))
@@ -181,15 +184,22 @@ function ReportCard({
           </div>
           {linkedNames.length > 0 && (
             <div className="flex flex-wrap gap-1 max-w-xs">
-              {linkedNames.slice(0, 3).map((name) => (
-                <Badge
-                  key={name}
-                  variant="secondary"
-                  className="text-[10px] px-1.5 py-0"
-                >
-                  {name}
-                </Badge>
-              ))}
+              {report.linkedClientIds.slice(0, 3).map((id) => {
+                const name = clientMap.get(id);
+                if (!name) return null;
+                return (
+                  <button
+                    type="button"
+                    key={id}
+                    data-ocid="daily_report.client_link"
+                    onClick={() => navigate({ to: "/clients" })}
+                    className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                  >
+                    {name}
+                    <ExternalLink size={8} />
+                  </button>
+                );
+              })}
               {linkedNames.length > 3 && (
                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                   +{linkedNames.length - 3} more

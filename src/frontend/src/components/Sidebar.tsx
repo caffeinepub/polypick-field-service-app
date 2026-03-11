@@ -12,7 +12,9 @@ import {
   LogOut,
   Menu,
   Receipt,
+  Ticket,
   TrendingUp,
+  Trophy,
   UserCog,
   Users,
   X,
@@ -111,6 +113,18 @@ export default function Sidebar({ isAdmin }: SidebarProps) {
       icon: <UserCog size={18} />,
       adminOnly: true,
       ocid: "nav.staff.link",
+    },
+    {
+      label: "Service Tickets",
+      href: "/service-tickets",
+      icon: <Ticket size={18} />,
+      ocid: "nav.service_tickets.link",
+    },
+    {
+      label: "Targets",
+      href: "/targets",
+      icon: <Trophy size={18} />,
+      ocid: "nav.targets.link",
     },
   ];
 
