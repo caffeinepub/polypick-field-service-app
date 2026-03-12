@@ -4,14 +4,19 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
+  Activity,
   BarChart3,
   CalendarCheck,
+  FileBarChart2,
   FileText,
   GitBranch,
+  HardHat,
   LayoutDashboard,
   LogOut,
+  MapPin,
   Menu,
   Receipt,
+  Settings,
   Ticket,
   TrendingUp,
   Trophy,
@@ -101,6 +106,43 @@ export default function Sidebar({ isAdmin }: SidebarProps) {
       ocid: "nav.marketing_report.link",
     },
     {
+      label: "Liner Installation",
+      href: "/liner-installation",
+      icon: <HardHat size={18} />,
+      ocid: "nav.liner_installation.link",
+    },
+    {
+      label: "Service Tickets",
+      href: "/service-tickets",
+      icon: <Ticket size={18} />,
+      ocid: "nav.service_tickets.link",
+    },
+    {
+      label: "Targets",
+      href: "/targets",
+      icon: <Trophy size={18} />,
+      ocid: "nav.targets.link",
+    },
+    {
+      label: "Activity Tracker",
+      href: "/activity-tracker",
+      icon: <Activity size={18} />,
+      ocid: "nav.activity_tracker.link",
+    },
+    {
+      label: "Location Tracker",
+      href: "/location-tracker",
+      icon: <MapPin size={18} />,
+      adminOnly: true,
+      ocid: "nav.location_tracker.link",
+    },
+    {
+      label: "Weekly Report",
+      href: "/weekly-report",
+      icon: <FileBarChart2 size={18} />,
+      ocid: "nav.weekly_report.link",
+    },
+    {
       label: "Reports",
       href: "/reports",
       icon: <BarChart3 size={18} />,
@@ -115,20 +157,17 @@ export default function Sidebar({ isAdmin }: SidebarProps) {
       ocid: "nav.staff.link",
     },
     {
-      label: "Service Tickets",
-      href: "/service-tickets",
-      icon: <Ticket size={18} />,
-      ocid: "nav.service_tickets.link",
-    },
-    {
-      label: "Targets",
-      href: "/targets",
-      icon: <Trophy size={18} />,
-      ocid: "nav.targets.link",
+      label: "Settings",
+      href: "/settings",
+      icon: <Settings size={18} />,
+      ocid: "nav.settings.link",
     },
   ];
 
-  const visibleItems = navItems.filter((item) => !item.adminOnly || isAdmin);
+  const localIsAdmin = localStorage.getItem("polypick_is_admin") === "true";
+  const visibleItems = navItems.filter(
+    (item) => !item.adminOnly || isAdmin || localIsAdmin,
+  );
 
   const isActive = (href: string) => {
     if (href === "/") return currentPath === "/";
@@ -161,7 +200,7 @@ export default function Sidebar({ isAdmin }: SidebarProps) {
       {/* Role indicator */}
       <div className="px-4 py-2 border-b border-sidebar-border/50">
         <span className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/50">
-          {isAdmin ? "Administrator" : "Field Staff"}
+          {isAdmin || localIsAdmin ? "Administrator" : "Field Staff"}
         </span>
       </div>
 

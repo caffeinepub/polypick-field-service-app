@@ -12,6 +12,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command";
+import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -20,6 +27,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -40,6 +52,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type { Principal } from "@icp-sdk/core/principal";
 import {
+  Check,
+  ChevronsUpDown,
   FileDown,
   GitBranch,
   Loader2,
@@ -71,6 +85,32 @@ import {
 
 const TYPES = ["all", "inquiry", "offer", "order", "service", "payment"];
 
+const TYPE_LABELS: Record<string, string> = {
+  inquiry: "Enquiry",
+  offer: "Offer",
+  order: "Order",
+  service: "Service",
+  payment: "Payment",
+};
+
+const TYPE_COLORS: Record<string, string> = {
+  inquiry: "bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200",
+  offer: "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200",
+  order:
+    "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200",
+  service:
+    "bg-purple-100 text-purple-800 border-purple-300 hover:bg-purple-200",
+  payment: "bg-red-100 text-red-800 border-red-300 hover:bg-red-200",
+};
+
+const TYPE_ACTIVE: Record<string, string> = {
+  inquiry: "bg-blue-600 text-white border-blue-600",
+  offer: "bg-amber-500 text-white border-amber-500",
+  order: "bg-emerald-600 text-white border-emerald-600",
+  service: "bg-purple-600 text-white border-purple-600",
+  payment: "bg-red-600 text-white border-red-600",
+};
+
 // ── PDF print helper ─────────────────────────────────────────────────────────
 
 function printInteractionsPDF(
@@ -98,7 +138,7 @@ function printInteractionsPDF(
       <tr>
         <td>${displayTitle}</td>
         <td>${getClientName(int.clientId)}</td>
-        <td style="text-transform:capitalize">${int.type}</td>
+        <td style="text-transform:capitalize">${TYPE_LABELS[int.type] ?? int.type}</td>
         <td style="text-transform:capitalize">${int.status}</td>
         <td style="text-transform:capitalize">${priority !== "none" ? priority : "—"}</td>
         <td>${amount}</td>
@@ -201,6 +241,226 @@ const emptyForm = {
   date: todayInputStr(),
 };
 
+type FormState = typeof emptyForm;
+
+// ── InteractionForm extracted OUTSIDE parent to prevent remount on re-render ──
+function InteractionForm({
+  form,
+  setForm,
+  clients,
+  onSubmit,
+  onCancel,
+  submitting,
+}: {
+  form: FormState;
+  setForm: React.Dispatch<React.SetStateAction<FormState>>;
+  clients: { id: bigint; name: string; company: string }[] | undefined;
+  onSubmit: (e: React.FormEvent) => void;
+  onCancel: () => void;
+  submitting: boolean;
+}) {
+  const [clientDropOpen, setClientDropOpen] = useState(false);
+  const [clientSearch, setClientSearch] = useState("");
+
+  return (
+    <form onSubmit={onSubmit} className="space-y-4 mt-2">
+      {/* Task Type Buttons */}
+      <div className="space-y-1.5">
+        <Label>Task Type *</Label>
+        <div className="flex flex-wrap gap-2">
+          {["inquiry", "offer", "order", "service", "payment"].map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setForm((p) => ({ ...p, type: t }))}
+              className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition-all ${
+                form.type === t
+                  ? (TYPE_ACTIVE[t] ?? "bg-primary text-white")
+                  : (TYPE_COLORS[t] ??
+                    "bg-muted text-muted-foreground border-border")
+              }`}
+              data-ocid={`interaction.type.${t}.toggle`}
+            >
+              {TYPE_LABELS[t] ?? t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Client Search */}
+      <div className="space-y-1.5">
+        <Label>Client *</Label>
+        <Popover open={clientDropOpen} onOpenChange={setClientDropOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              data-ocid="interaction.client.select"
+              className="w-full justify-between font-normal"
+            >
+              {form.clientId
+                ? (() => {
+                    const c = (clients ?? []).find(
+                      (c) => c.id.toString() === form.clientId,
+                    );
+                    return c ? `${c.name} – ${c.company}` : "Select client";
+                  })()
+                : "Select client"}
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[320px] p-0" align="start">
+            <Command shouldFilter={false}>
+              <CommandInput
+                placeholder="Client ka naam type karein..."
+                value={clientSearch}
+                onValueChange={setClientSearch}
+                autoFocus
+              />
+              <CommandEmpty>No client found.</CommandEmpty>
+              <CommandGroup className="max-h-60 overflow-y-auto">
+                {(clients ?? [])
+                  .filter(
+                    (c) =>
+                      c.name
+                        .toLowerCase()
+                        .includes(clientSearch.toLowerCase()) ||
+                      c.company
+                        .toLowerCase()
+                        .includes(clientSearch.toLowerCase()),
+                  )
+                  .map((c) => (
+                    <CommandItem
+                      key={c.id.toString()}
+                      value={c.id.toString()}
+                      onSelect={(v) => {
+                        setForm((p) => ({ ...p, clientId: v }));
+                        setClientSearch("");
+                        setClientDropOpen(false);
+                      }}
+                    >
+                      <Check
+                        className={`mr-2 h-4 w-4 ${
+                          form.clientId === c.id.toString()
+                            ? "opacity-100"
+                            : "opacity-0"
+                        }`}
+                      />
+                      {c.name} – {c.company}
+                    </CommandItem>
+                  ))}
+              </CommandGroup>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label>Title *</Label>
+          <Input
+            data-ocid="interaction.title.input"
+            value={form.title}
+            onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
+            required
+            placeholder="e.g. Pump supply inquiry"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Priority</Label>
+          <Select
+            value={form.priority}
+            onValueChange={(v) => setForm((p) => ({ ...p, priority: v }))}
+          >
+            <SelectTrigger data-ocid="interaction.priority.select">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">— None —</SelectItem>
+              <SelectItem value="high">🔴 High</SelectItem>
+              <SelectItem value="medium">🟡 Medium</SelectItem>
+              <SelectItem value="low">🔵 Low</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label>Description</Label>
+        <Textarea
+          data-ocid="interaction.description.textarea"
+          value={form.description}
+          onChange={(e) =>
+            setForm((p) => ({ ...p, description: e.target.value }))
+          }
+          rows={3}
+          autoComplete="off"
+          placeholder="Details..."
+        />
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        <div className="space-y-1.5">
+          <Label>Status</Label>
+          <Select
+            value={form.status}
+            onValueChange={(v) => setForm((p) => ({ ...p, status: v }))}
+          >
+            <SelectTrigger data-ocid="interaction.status.select">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="inProgress">In Progress</SelectItem>
+              <SelectItem value="closed">Closed</SelectItem>
+              <SelectItem value="won">Won</SelectItem>
+              <SelectItem value="lost">Lost</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Amount (₹)</Label>
+          <Input
+            data-ocid="interaction.amount.input"
+            type="number"
+            min="0"
+            value={form.amount}
+            onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))}
+            placeholder="0"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Date *</Label>
+          <Input
+            data-ocid="interaction.date.input"
+            type="date"
+            value={form.date}
+            onChange={(e) => setForm((p) => ({ ...p, date: e.target.value }))}
+            required
+          />
+        </div>
+      </div>
+      <DialogFooter>
+        <Button
+          type="button"
+          variant="outline"
+          data-ocid="interactions.cancel_button"
+          onClick={onCancel}
+        >
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          data-ocid="interactions.save_button"
+          disabled={submitting || !form.clientId}
+        >
+          {submitting ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : null}
+          Save
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
 export default function InteractionsPage() {
   const [activeTab, setActiveTab] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
@@ -240,11 +500,16 @@ export default function InteractionsPage() {
     .filter((i) => {
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
-      const clientName = getClientName(i.clientId).toLowerCase();
+      const clientObj = clients?.find((c) => c.id === i.clientId);
+      const clientName = (
+        clientObj?.name ?? `Client #${i.clientId}`
+      ).toLowerCase();
+      const clientCompany = (clientObj?.company ?? "").toLowerCase();
       const { displayTitle } = decodePriority(i.title);
       return (
         displayTitle.toLowerCase().includes(q) ||
         clientName.includes(q) ||
+        clientCompany.includes(q) ||
         i.description.toLowerCase().includes(q)
       );
     });
@@ -344,157 +609,6 @@ export default function InteractionsPage() {
     }
   };
 
-  const InteractionForm = ({
-    onSubmit,
-    submitting,
-  }: { onSubmit: (e: React.FormEvent) => void; submitting: boolean }) => (
-    <form onSubmit={onSubmit} className="space-y-4 mt-2">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Client *</Label>
-          <Select
-            value={form.clientId}
-            onValueChange={(v) => setForm((p) => ({ ...p, clientId: v }))}
-          >
-            <SelectTrigger data-ocid="interaction.client.select">
-              <SelectValue placeholder="Select client" />
-            </SelectTrigger>
-            <SelectContent>
-              {(clients ?? []).map((c) => (
-                <SelectItem key={c.id.toString()} value={c.id.toString()}>
-                  {c.name} – {c.company}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Type</Label>
-          <Select
-            value={form.type}
-            onValueChange={(v) => setForm((p) => ({ ...p, type: v }))}
-          >
-            <SelectTrigger data-ocid="interaction.type.select">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="inquiry">Inquiry</SelectItem>
-              <SelectItem value="offer">Offer</SelectItem>
-              <SelectItem value="order">Order</SelectItem>
-              <SelectItem value="service">Service</SelectItem>
-              <SelectItem value="payment">Payment</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Title *</Label>
-          <Input
-            data-ocid="interaction.title.input"
-            value={form.title}
-            onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
-            required
-            placeholder="e.g. Pump supply inquiry"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Priority</Label>
-          <Select
-            value={form.priority}
-            onValueChange={(v) => setForm((p) => ({ ...p, priority: v }))}
-          >
-            <SelectTrigger data-ocid="interaction.priority.select">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">— None —</SelectItem>
-              <SelectItem value="high">🔴 High</SelectItem>
-              <SelectItem value="medium">🟡 Medium</SelectItem>
-              <SelectItem value="low">🔵 Low</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div className="space-y-1.5">
-        <Label>Description</Label>
-        <Textarea
-          data-ocid="interaction.description.textarea"
-          value={form.description}
-          onChange={(e) =>
-            setForm((p) => ({ ...p, description: e.target.value }))
-          }
-          rows={3}
-          placeholder="Details..."
-        />
-      </div>
-      <div className="grid grid-cols-3 gap-4">
-        <div className="space-y-1.5">
-          <Label>Status</Label>
-          <Select
-            value={form.status}
-            onValueChange={(v) => setForm((p) => ({ ...p, status: v }))}
-          >
-            <SelectTrigger data-ocid="interaction.status.select">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="open">Open</SelectItem>
-              <SelectItem value="inProgress">In Progress</SelectItem>
-              <SelectItem value="closed">Closed</SelectItem>
-              <SelectItem value="won">Won</SelectItem>
-              <SelectItem value="lost">Lost</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Amount (₹)</Label>
-          <Input
-            data-ocid="interaction.amount.input"
-            type="number"
-            min="0"
-            value={form.amount}
-            onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))}
-            placeholder="0"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Date *</Label>
-          <Input
-            data-ocid="interaction.date.input"
-            type="date"
-            value={form.date}
-            onChange={(e) => setForm((p) => ({ ...p, date: e.target.value }))}
-            required
-          />
-        </div>
-      </div>
-      <DialogFooter>
-        <Button
-          type="button"
-          variant="outline"
-          data-ocid="interactions.cancel_button"
-          onClick={() => {
-            setAddOpen(false);
-            setEditOpen(false);
-          }}
-        >
-          Cancel
-        </Button>
-        <Button
-          type="submit"
-          data-ocid="interactions.save_button"
-          disabled={submitting || !form.clientId}
-        >
-          {submitting ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : null}
-          Save
-        </Button>
-      </DialogFooter>
-    </form>
-  );
-
   return (
     <div className="p-6 md:p-8 space-y-6 animate-fade-in">
       {/* Header */}
@@ -505,7 +619,7 @@ export default function InteractionsPage() {
             PPI – Sales Pipeline
           </h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            Track inquiries, offers, orders, services &amp; payments
+            Track enquiries, offers, orders, services &amp; payments
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -535,12 +649,70 @@ export default function InteractionsPage() {
         </div>
       </div>
 
+      {/* Search Bar - full width on mobile */}
+      <div className="relative w-full">
+        <Search
+          size={16}
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+        />
+        <Input
+          data-ocid="interactions.search_input"
+          type="text"
+          placeholder="Client naam ya title search karein..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9 w-full"
+        />
+      </div>
+
+      {/* Quick Task Type Filter */}
+      <div className="flex flex-wrap gap-2">
+        {["inquiry", "offer", "order", "service", "payment"].map((t) => {
+          const count = countByType[t] ?? 0;
+          const isActive = activeTab === t;
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setActiveTab(isActive ? "all" : t)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all ${
+                isActive
+                  ? (TYPE_ACTIVE[t] ?? "bg-primary text-white")
+                  : (TYPE_COLORS[t] ??
+                    "bg-muted text-muted-foreground border-border")
+              }`}
+              data-ocid={`interactions.type_filter.${t}.toggle`}
+            >
+              {TYPE_LABELS[t] ?? t}
+              {count > 0 && (
+                <span
+                  className={`inline-flex items-center justify-center h-4 min-w-[1rem] px-1 rounded-full text-[10px] font-bold ${
+                    isActive ? "bg-white/30 text-white" : "bg-white/80"
+                  }`}
+                >
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+        {activeTab !== "all" && (
+          <button
+            type="button"
+            onClick={() => setActiveTab("all")}
+            className="px-3 py-1.5 rounded-full border border-border text-xs text-muted-foreground hover:bg-muted transition-all"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
       {/* Pipeline Summary */}
       {pipelineStats && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             {
-              label: "Inquiries",
+              label: "Enquiries",
               value: pipelineStats.inquiry,
               color: "text-blue-600 bg-blue-50",
             },
@@ -583,22 +755,6 @@ export default function InteractionsPage() {
         </div>
       )}
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search
-          size={16}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input
-          data-ocid="interactions.search_input"
-          type="text"
-          placeholder="Search by client, title..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
-        />
-      </div>
-
       {/* Inactivity Warning Banner */}
       {inactiveIds.size > 0 && (
         <div
@@ -619,8 +775,7 @@ export default function InteractionsPage() {
         >
           {TYPES.map((t) => {
             const count = countByType[t] ?? 0;
-            const label =
-              t === "all" ? "All" : t.charAt(0).toUpperCase() + t.slice(1);
+            const label = t === "all" ? "All" : (TYPE_LABELS[t] ?? t);
             return (
               <TabsTrigger
                 key={t}
@@ -723,7 +878,7 @@ export default function InteractionsPage() {
                               variant="outline"
                               className={`capitalize text-xs ${typeBadgeClass}`}
                             >
-                              {int.type}
+                              {TYPE_LABELS[int.type] ?? int.type}
                             </Badge>
                           </TableCell>
                           <TableCell>
@@ -798,7 +953,11 @@ export default function InteractionsPage() {
             <DialogTitle className="font-display">Add PPI Entry</DialogTitle>
           </DialogHeader>
           <InteractionForm
+            form={form}
+            setForm={setForm}
+            clients={clients}
             onSubmit={handleAdd}
+            onCancel={() => setAddOpen(false)}
             submitting={createInteraction.isPending}
           />
         </DialogContent>
@@ -814,7 +973,14 @@ export default function InteractionsPage() {
             <DialogTitle className="font-display">Edit PPI Entry</DialogTitle>
           </DialogHeader>
           <InteractionForm
+            form={form}
+            setForm={setForm}
+            clients={clients}
             onSubmit={handleEdit}
+            onCancel={() => {
+              setEditOpen(false);
+              setEditingId(null);
+            }}
             submitting={updateInteraction.isPending}
           />
         </DialogContent>

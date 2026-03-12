@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -24,10 +24,13 @@ import {
   Clock,
   Download,
   Filter,
+  MapPin,
   Pencil,
   Plus,
+  Settings2,
   Ticket,
   Trash2,
+  Wrench,
   XCircle,
 } from "lucide-react";
 import { useState } from "react";
@@ -44,7 +47,24 @@ interface ServiceTicket {
   dateCreated: string;
   dateResolved: string;
   notes: string;
+  // New fields
+  serviceType:
+    | "Installation"
+    | "Repair"
+    | "Maintenance"
+    | "Inspection"
+    | "AMC"
+    | "Other"
+    | "";
+  equipmentName: string;
+  location: string;
+  workDone: string;
+  partsUsed: string;
+  nextServiceDate: string;
+  visitType: "First Visit" | "Revisit" | "Warranty" | "Paid" | "AMC Visit" | "";
 }
+
+type TicketFormValues = Omit<ServiceTicket, "id" | "ticketNo">;
 
 function useTickets() {
   const [tickets, setTickets] = useState<ServiceTicket[]>(() => {
@@ -60,7 +80,7 @@ function useTickets() {
     localStorage.setItem("polypick_tickets", JSON.stringify(next));
   };
 
-  const add = (t: Omit<ServiceTicket, "id" | "ticketNo">) => {
+  const add = (t: TicketFormValues) => {
     const now = Date.now();
     const ticketNo = `TKT-${String(now).slice(-6)}`;
     save([{ ...t, id: String(now), ticketNo }, ...tickets]);
@@ -75,7 +95,7 @@ function useTickets() {
   return { tickets, add, update, remove };
 }
 
-const empty: Omit<ServiceTicket, "id" | "ticketNo"> = {
+const emptyForm: TicketFormValues = {
   clientName: "",
   issueDescription: "",
   priority: "Medium",
@@ -84,11 +104,18 @@ const empty: Omit<ServiceTicket, "id" | "ticketNo"> = {
   dateCreated: new Date().toISOString().slice(0, 10),
   dateResolved: "",
   notes: "",
+  serviceType: "",
+  equipmentName: "",
+  location: "",
+  workDone: "",
+  partsUsed: "",
+  nextServiceDate: "",
+  visitType: "",
 };
 
 const STATUS_CONFIG: Record<
   ServiceTicket["status"],
-  { label: string; color: string; icon: React.FC<any> }
+  { label: string; color: string; icon: React.FC<{ size?: number }> }
 > = {
   Open: { label: "Open", color: "bg-blue-100 text-blue-700", icon: Clock },
   "In Progress": {
@@ -114,6 +141,305 @@ const PRIORITY_COLOR: Record<ServiceTicket["priority"], string> = {
   Low: "bg-green-100 text-green-700",
 };
 
+const SERVICE_TYPE_COLOR: Record<string, string> = {
+  Installation: "bg-purple-100 text-purple-700",
+  Repair: "bg-red-100 text-red-700",
+  Maintenance: "bg-blue-100 text-blue-700",
+  Inspection: "bg-cyan-100 text-cyan-700",
+  AMC: "bg-green-100 text-green-700",
+  Other: "bg-gray-100 text-gray-600",
+};
+
+// ── TicketFormContent extracted OUTSIDE parent component to prevent focus loss ──
+function TicketFormContent({
+  initialValues,
+  onSave,
+  onCancel,
+  submitLabel,
+}: {
+  initialValues: TicketFormValues;
+  onSave: (values: TicketFormValues) => void;
+  onCancel: () => void;
+  submitLabel: string;
+}) {
+  const [form, setForm] = useState<TicketFormValues>(initialValues);
+
+  const handleSubmit = () => {
+    if (!form.clientName.trim() || !form.issueDescription.trim()) {
+      toast.error("Client name aur issue description zaroori hai");
+      return;
+    }
+    onSave(form);
+  };
+
+  return (
+    <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+      {/* Section: Basic Info */}
+      <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          Basic Info
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label>Client Name *</Label>
+            <Input
+              placeholder="Client ka naam"
+              value={form.clientName}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, clientName: e.target.value }))
+              }
+              data-ocid="ticket.client_name.input"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Assigned To</Label>
+            <Input
+              placeholder="Staff member"
+              value={form.assignedTo}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, assignedTo: e.target.value }))
+              }
+              data-ocid="ticket.assigned_to.input"
+            />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Issue Description *</Label>
+          <Textarea
+            placeholder="Problem ki detail likhein..."
+            rows={2}
+            value={form.issueDescription}
+            onChange={(e) =>
+              setForm((p) => ({ ...p, issueDescription: e.target.value }))
+            }
+            data-ocid="ticket.issue.textarea"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label>Priority</Label>
+            <Select
+              value={form.priority}
+              onValueChange={(v) =>
+                setForm((p) => ({
+                  ...p,
+                  priority: v as ServiceTicket["priority"],
+                }))
+              }
+            >
+              <SelectTrigger data-ocid="ticket.priority.select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="High">High</SelectItem>
+                <SelectItem value="Medium">Medium</SelectItem>
+                <SelectItem value="Low">Low</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Status</Label>
+            <Select
+              value={form.status}
+              onValueChange={(v) =>
+                setForm((p) => ({
+                  ...p,
+                  status: v as ServiceTicket["status"],
+                }))
+              }
+            >
+              <SelectTrigger data-ocid="ticket.status.select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Open">Open</SelectItem>
+                <SelectItem value="In Progress">In Progress</SelectItem>
+                <SelectItem value="Resolved">Resolved</SelectItem>
+                <SelectItem value="Closed">Closed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      {/* Section: Service Details */}
+      <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          Service Details
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label>Service Type</Label>
+            <Select
+              value={form.serviceType}
+              onValueChange={(v) =>
+                setForm((p) => ({
+                  ...p,
+                  serviceType: v as ServiceTicket["serviceType"],
+                }))
+              }
+            >
+              <SelectTrigger data-ocid="ticket.service_type.select">
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Installation">Installation</SelectItem>
+                <SelectItem value="Repair">Repair</SelectItem>
+                <SelectItem value="Maintenance">Maintenance</SelectItem>
+                <SelectItem value="Inspection">Inspection</SelectItem>
+                <SelectItem value="AMC">AMC</SelectItem>
+                <SelectItem value="Other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Visit Type</Label>
+            <Select
+              value={form.visitType}
+              onValueChange={(v) =>
+                setForm((p) => ({
+                  ...p,
+                  visitType: v as ServiceTicket["visitType"],
+                }))
+              }
+            >
+              <SelectTrigger data-ocid="ticket.visit_type.select">
+                <SelectValue placeholder="Select visit" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="First Visit">First Visit</SelectItem>
+                <SelectItem value="Revisit">Revisit</SelectItem>
+                <SelectItem value="Warranty">Warranty</SelectItem>
+                <SelectItem value="Paid">Paid</SelectItem>
+                <SelectItem value="AMC Visit">AMC Visit</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Equipment / Machine Name</Label>
+          <Input
+            placeholder="e.g. UHMWPE Liner, Conveyor Belt, Pump..."
+            value={form.equipmentName}
+            onChange={(e) =>
+              setForm((p) => ({ ...p, equipmentName: e.target.value }))
+            }
+            data-ocid="ticket.equipment_name.input"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Site / Location</Label>
+          <Input
+            placeholder="e.g. RSP Rourkela, Plant Area B..."
+            value={form.location}
+            onChange={(e) =>
+              setForm((p) => ({ ...p, location: e.target.value }))
+            }
+            data-ocid="ticket.location.input"
+          />
+        </div>
+      </div>
+
+      {/* Section: Work Report */}
+      <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          Work Report
+        </p>
+        <div className="space-y-1.5">
+          <Label>Work Done</Label>
+          <Textarea
+            placeholder="Kya kaam kiya gaya -- detail mein likhein..."
+            rows={3}
+            value={form.workDone}
+            onChange={(e) =>
+              setForm((p) => ({ ...p, workDone: e.target.value }))
+            }
+            data-ocid="ticket.work_done.textarea"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Parts / Materials Used</Label>
+          <Input
+            placeholder="e.g. UHMWPE Sheet 10mm, Bolts M16, Sealant... (comma separated)"
+            value={form.partsUsed}
+            onChange={(e) =>
+              setForm((p) => ({ ...p, partsUsed: e.target.value }))
+            }
+            data-ocid="ticket.parts_used.input"
+          />
+        </div>
+      </div>
+
+      {/* Section: Dates */}
+      <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          Dates
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label>Date Created</Label>
+            <Input
+              type="date"
+              value={form.dateCreated}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, dateCreated: e.target.value }))
+              }
+              data-ocid="ticket.date_created.input"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Date Resolved</Label>
+            <Input
+              type="date"
+              value={form.dateResolved}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, dateResolved: e.target.value }))
+              }
+              data-ocid="ticket.date_resolved.input"
+            />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Next Service Due Date</Label>
+          <Input
+            type="date"
+            value={form.nextServiceDate}
+            onChange={(e) =>
+              setForm((p) => ({ ...p, nextServiceDate: e.target.value }))
+            }
+            data-ocid="ticket.next_service_date.input"
+          />
+        </div>
+      </div>
+
+      {/* Section: Notes */}
+      <div className="space-y-1.5">
+        <Label>Notes</Label>
+        <Textarea
+          placeholder="Additional notes..."
+          rows={2}
+          value={form.notes}
+          onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
+          data-ocid="ticket.notes.textarea"
+        />
+      </div>
+
+      <DialogFooter>
+        <Button
+          variant="outline"
+          onClick={onCancel}
+          data-ocid="tickets.form.cancel_button"
+        >
+          Cancel
+        </Button>
+        <Button onClick={handleSubmit} data-ocid="tickets.form.submit_button">
+          {submitLabel}
+        </Button>
+      </DialogFooter>
+    </div>
+  );
+}
+
 export default function ServiceTicketsPage() {
   const { tickets, add, update, remove } = useTickets();
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -122,7 +448,6 @@ export default function ServiceTicketsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [editTicket, setEditTicket] = useState<ServiceTicket | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [form, setForm] = useState({ ...empty });
 
   const filtered = tickets.filter((t) => {
     if (filterStatus !== "all" && t.status !== filterStatus) return false;
@@ -132,45 +457,25 @@ export default function ServiceTicketsPage() {
       q &&
       !t.clientName.toLowerCase().includes(q) &&
       !t.ticketNo.toLowerCase().includes(q) &&
-      !t.issueDescription.toLowerCase().includes(q)
+      !t.issueDescription.toLowerCase().includes(q) &&
+      !(t.equipmentName ?? "").toLowerCase().includes(q) &&
+      !(t.location ?? "").toLowerCase().includes(q)
     )
       return false;
     return true;
   });
 
-  const openAdd = () => {
-    setForm({ ...empty, dateCreated: new Date().toISOString().slice(0, 10) });
-    setAddOpen(true);
+  const handleAddSave = (values: TicketFormValues) => {
+    add(values);
+    toast.success("Ticket created!");
+    setAddOpen(false);
   };
 
-  const openEdit = (t: ServiceTicket) => {
-    setEditTicket(t);
-    setForm({
-      clientName: t.clientName,
-      issueDescription: t.issueDescription,
-      priority: t.priority,
-      status: t.status,
-      assignedTo: t.assignedTo,
-      dateCreated: t.dateCreated,
-      dateResolved: t.dateResolved,
-      notes: t.notes,
-    });
-  };
-
-  const handleSave = () => {
-    if (!form.clientName.trim() || !form.issueDescription.trim()) {
-      toast.error("Client name and issue description are required");
-      return;
-    }
-    if (editTicket) {
-      update(editTicket.id, form);
-      toast.success("Ticket updated!");
-      setEditTicket(null);
-    } else {
-      add(form);
-      toast.success("Ticket created!");
-      setAddOpen(false);
-    }
+  const handleEditSave = (values: TicketFormValues) => {
+    if (!editTicket) return;
+    update(editTicket.id, values);
+    toast.success("Ticket updated!");
+    setEditTicket(null);
   };
 
   const handleDelete = () => {
@@ -180,27 +485,41 @@ export default function ServiceTicketsPage() {
     setDeleteId(null);
   };
 
-  const exportExcel = () => {
+  const exportCsv = () => {
     const headers = [
       "Ticket No",
       "Client",
+      "Service Type",
+      "Visit Type",
+      "Equipment",
+      "Location",
       "Issue",
+      "Work Done",
+      "Parts Used",
       "Priority",
       "Status",
       "Assigned To",
       "Date Created",
       "Date Resolved",
+      "Next Service Date",
       "Notes",
     ];
     const rows = tickets.map((t) => [
       t.ticketNo,
       t.clientName,
+      t.serviceType ?? "",
+      t.visitType ?? "",
+      t.equipmentName ?? "",
+      t.location ?? "",
       t.issueDescription,
+      t.workDone ?? "",
+      t.partsUsed ?? "",
       t.priority,
       t.status,
       t.assignedTo,
       t.dateCreated,
       t.dateResolved,
+      t.nextServiceDate ?? "",
       t.notes,
     ]);
     const csv = [headers, ...rows]
@@ -225,122 +544,25 @@ export default function ServiceTicketsPage() {
     closed: tickets.filter((t) => t.status === "Closed").length,
   };
 
-  const TicketForm = () => (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label>Client Name *</Label>
-          <Input
-            placeholder="Client ka naam"
-            value={form.clientName}
-            onChange={(e) =>
-              setForm((p) => ({ ...p, clientName: e.target.value }))
-            }
-            data-ocid="ticket.client_name.input"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Assigned To</Label>
-          <Input
-            placeholder="Staff member"
-            value={form.assignedTo}
-            onChange={(e) =>
-              setForm((p) => ({ ...p, assignedTo: e.target.value }))
-            }
-            data-ocid="ticket.assigned_to.input"
-          />
-        </div>
-      </div>
-      <div className="space-y-1.5">
-        <Label>Issue Description *</Label>
-        <Textarea
-          placeholder="Problem ki detail likhein..."
-          rows={3}
-          value={form.issueDescription}
-          onChange={(e) =>
-            setForm((p) => ({ ...p, issueDescription: e.target.value }))
-          }
-          data-ocid="ticket.issue.textarea"
-        />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label>Priority</Label>
-          <Select
-            value={form.priority}
-            onValueChange={(v) =>
-              setForm((p) => ({
-                ...p,
-                priority: v as ServiceTicket["priority"],
-              }))
-            }
-          >
-            <SelectTrigger data-ocid="ticket.priority.select">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="High">High</SelectItem>
-              <SelectItem value="Medium">Medium</SelectItem>
-              <SelectItem value="Low">Low</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Status</Label>
-          <Select
-            value={form.status}
-            onValueChange={(v) =>
-              setForm((p) => ({ ...p, status: v as ServiceTicket["status"] }))
-            }
-          >
-            <SelectTrigger data-ocid="ticket.status.select">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Open">Open</SelectItem>
-              <SelectItem value="In Progress">In Progress</SelectItem>
-              <SelectItem value="Resolved">Resolved</SelectItem>
-              <SelectItem value="Closed">Closed</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label>Date Created</Label>
-          <Input
-            type="date"
-            value={form.dateCreated}
-            onChange={(e) =>
-              setForm((p) => ({ ...p, dateCreated: e.target.value }))
-            }
-            data-ocid="ticket.date_created.input"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Date Resolved</Label>
-          <Input
-            type="date"
-            value={form.dateResolved}
-            onChange={(e) =>
-              setForm((p) => ({ ...p, dateResolved: e.target.value }))
-            }
-            data-ocid="ticket.date_resolved.input"
-          />
-        </div>
-      </div>
-      <div className="space-y-1.5">
-        <Label>Notes</Label>
-        <Textarea
-          placeholder="Additional notes..."
-          rows={2}
-          value={form.notes}
-          onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
-          data-ocid="ticket.notes.textarea"
-        />
-      </div>
-    </div>
-  );
+  const editInitialValues: TicketFormValues | null = editTicket
+    ? {
+        clientName: editTicket.clientName,
+        issueDescription: editTicket.issueDescription,
+        priority: editTicket.priority,
+        status: editTicket.status,
+        assignedTo: editTicket.assignedTo,
+        dateCreated: editTicket.dateCreated,
+        dateResolved: editTicket.dateResolved,
+        notes: editTicket.notes,
+        serviceType: editTicket.serviceType ?? "",
+        equipmentName: editTicket.equipmentName ?? "",
+        location: editTicket.location ?? "",
+        workDone: editTicket.workDone ?? "",
+        partsUsed: editTicket.partsUsed ?? "",
+        nextServiceDate: editTicket.nextServiceDate ?? "",
+        visitType: editTicket.visitType ?? "",
+      }
+    : null;
 
   return (
     <div
@@ -362,7 +584,7 @@ export default function ServiceTicketsPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={exportExcel}
+            onClick={exportCsv}
             className="gap-2"
             data-ocid="tickets.export.button"
           >
@@ -371,7 +593,7 @@ export default function ServiceTicketsPage() {
           </Button>
           <Button
             size="sm"
-            onClick={openAdd}
+            onClick={() => setAddOpen(true)}
             className="gap-2"
             data-ocid="tickets.add.primary_button"
           >
@@ -420,7 +642,7 @@ export default function ServiceTicketsPage() {
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-[160px]">
           <Input
-            placeholder="Search tickets..."
+            placeholder="Search tickets, equipment, location..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-3 h-8 text-sm"
@@ -485,6 +707,7 @@ export default function ServiceTicketsPage() {
                 <CardContent className="pt-4 pb-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
+                      {/* Top badges row */}
                       <div className="flex flex-wrap items-center gap-2 mb-1">
                         <span className="text-xs font-mono text-muted-foreground">
                           {t.ticketNo}
@@ -500,20 +723,80 @@ export default function ServiceTicketsPage() {
                           <StatusIcon size={10} />
                           {t.status}
                         </Badge>
+                        {t.serviceType && (
+                          <Badge
+                            className={`${
+                              SERVICE_TYPE_COLOR[t.serviceType] ??
+                              "bg-gray-100 text-gray-600"
+                            } border-0 text-xs flex items-center gap-1`}
+                          >
+                            <Settings2 size={9} />
+                            {t.serviceType}
+                          </Badge>
+                        )}
+                        {t.visitType && (
+                          <Badge className="bg-indigo-100 text-indigo-700 border-0 text-xs">
+                            {t.visitType}
+                          </Badge>
+                        )}
                       </div>
+
+                      {/* Client name */}
                       <p className="font-semibold text-sm text-foreground">
                         {t.clientName}
                       </p>
+
+                      {/* Equipment + Location */}
+                      {(t.equipmentName || t.location) && (
+                        <div className="flex flex-wrap gap-3 mt-0.5 text-xs text-muted-foreground">
+                          {t.equipmentName && (
+                            <span className="flex items-center gap-1">
+                              <Wrench size={10} />
+                              {t.equipmentName}
+                            </span>
+                          )}
+                          {t.location && (
+                            <span className="flex items-center gap-1">
+                              <MapPin size={10} />
+                              {t.location}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Issue */}
                       <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">
                         {t.issueDescription}
                       </p>
-                      <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
+
+                      {/* Work done (brief) */}
+                      {t.workDone && (
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                          🔧 {t.workDone}
+                        </p>
+                      )}
+
+                      {/* Parts */}
+                      {t.partsUsed && (
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                          🔩 Parts: {t.partsUsed}
+                        </p>
+                      )}
+
+                      {/* Meta row */}
+                      <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-muted-foreground">
                         {t.assignedTo && <span>👤 {t.assignedTo}</span>}
                         <span>📅 {t.dateCreated}</span>
                         {t.dateResolved && (
                           <span>✅ Resolved: {t.dateResolved}</span>
                         )}
+                        {t.nextServiceDate && (
+                          <span className="text-amber-600 font-medium">
+                            🔁 Next: {t.nextServiceDate}
+                          </span>
+                        )}
                       </div>
+
                       {t.notes && (
                         <p className="text-xs text-muted-foreground mt-1 italic">
                           📝 {t.notes}
@@ -525,7 +808,7 @@ export default function ServiceTicketsPage() {
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7"
-                        onClick={() => openEdit(t)}
+                        onClick={() => setEditTicket(t)}
                         data-ocid={`tickets.edit_button.${idx + 1}`}
                       >
                         <Pencil size={13} />
@@ -557,19 +840,16 @@ export default function ServiceTicketsPage() {
               New Service Ticket
             </DialogTitle>
           </DialogHeader>
-          <TicketForm />
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setAddOpen(false)}
-              data-ocid="tickets.add.cancel_button"
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleSave} data-ocid="tickets.add.submit_button">
-              Create Ticket
-            </Button>
-          </DialogFooter>
+          <TicketFormContent
+            key="add-ticket"
+            initialValues={{
+              ...emptyForm,
+              dateCreated: new Date().toISOString().slice(0, 10),
+            }}
+            onSave={handleAddSave}
+            onCancel={() => setAddOpen(false)}
+            submitLabel="Create Ticket"
+          />
         </DialogContent>
       </Dialog>
 
@@ -584,19 +864,15 @@ export default function ServiceTicketsPage() {
               Edit Ticket — {editTicket?.ticketNo}
             </DialogTitle>
           </DialogHeader>
-          <TicketForm />
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setEditTicket(null)}
-              data-ocid="tickets.edit.cancel_button"
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleSave} data-ocid="tickets.edit.save_button">
-              Save Changes
-            </Button>
-          </DialogFooter>
+          {editInitialValues && (
+            <TicketFormContent
+              key={editTicket?.id}
+              initialValues={editInitialValues}
+              onSave={handleEditSave}
+              onCancel={() => setEditTicket(null)}
+              submitLabel="Save Changes"
+            />
+          )}
         </DialogContent>
       </Dialog>
 

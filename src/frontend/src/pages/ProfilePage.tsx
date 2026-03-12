@@ -70,6 +70,7 @@ export default function ProfilePage() {
         role: UserRole.admin,
       });
       await refetchAdmin();
+      localStorage.setItem("polypick_is_admin", "true");
       toast.success("Admin access granted! Please refresh the page.");
       // reload to update sidebar
       setTimeout(() => window.location.reload(), 1200);

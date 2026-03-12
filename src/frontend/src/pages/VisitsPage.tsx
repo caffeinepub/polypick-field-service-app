@@ -12,6 +12,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command";
+import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -20,6 +27,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -45,7 +57,9 @@ import {
   Ban,
   CalendarCheck,
   CalendarDays,
+  Check,
   CheckCircle2,
+  ChevronsUpDown,
   Clock,
   Copy,
   FileDown,
@@ -55,11 +69,11 @@ import {
   MapPin,
   MapPinOff,
   Plus,
+  Search,
   Trash2,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
 import { Status } from "../backend.d";
 import { StatusBadge } from "../components/StatusBadge";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
@@ -74,6 +88,7 @@ import {
   useUpdateVisit,
 } from "../hooks/useQueries";
 import { dateInputToNs, formatDate, todayInputStr } from "../utils/dateUtils";
+import { exportCSV } from "../utils/exportUtils";
 import {
   captureLocation,
   formatGPS,
@@ -386,8 +401,252 @@ const emptyForm = {
   capturingGps: false,
 };
 
+type AddVisitFormValues = {
+  clientId: string;
+  plannedDate: string;
+  purpose: string;
+  fromLocation: string;
+  toLocation: string;
+  distanceKm: string;
+  capturedGps: { lat: number; lng: number } | null;
+};
+
+// Defined OUTSIDE VisitsPage to prevent remount on parent re-render
+function AddVisitForm({
+  clients,
+  isPending,
+  onSubmit,
+  onCancel,
+}: {
+  clients: { id: bigint; name: string; company: string }[] | undefined;
+  isPending: boolean;
+  onSubmit: (values: AddVisitFormValues) => void;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState({
+    ...emptyForm,
+    plannedDate: todayInputStr(),
+  });
+  const [clientDropOpen, setClientDropOpen] = useState(false);
+  const [clientSearch, setClientSearch] = useState("");
+
+  const handleCaptureGps = async () => {
+    setForm((p) => ({ ...p, capturingGps: true }));
+    const loc = await captureLocation();
+    setForm((p) => ({ ...p, capturingGps: false }));
+    if (loc) {
+      setForm((p) => ({ ...p, capturedGps: loc }));
+      toast.success(
+        `Location captured: ${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}`,
+      );
+    } else {
+      toast.error("Could not capture location");
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.clientId) return;
+    onSubmit({
+      clientId: form.clientId,
+      plannedDate: form.plannedDate,
+      purpose: form.purpose,
+      fromLocation: form.fromLocation,
+      toLocation: form.toLocation,
+      distanceKm: form.distanceKm,
+      capturedGps: form.capturedGps,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label>Client *</Label>
+          <Popover open={clientDropOpen} onOpenChange={setClientDropOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                data-ocid="visits.client.select"
+                className="w-full justify-between font-normal"
+              >
+                {form.clientId
+                  ? (() => {
+                      const c = (clients ?? []).find(
+                        (c) => c.id.toString() === form.clientId,
+                      );
+                      return c ? `${c.name} – ${c.company}` : "Select client";
+                    })()
+                  : "Select client"}
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[320px] p-0" align="start">
+              <Command>
+                <CommandInput
+                  placeholder="Search client..."
+                  value={clientSearch}
+                  onValueChange={setClientSearch}
+                />
+                <CommandEmpty>No client found.</CommandEmpty>
+                <CommandGroup className="max-h-60 overflow-y-auto">
+                  {(clients ?? [])
+                    .filter(
+                      (c) =>
+                        c.name
+                          .toLowerCase()
+                          .includes(clientSearch.toLowerCase()) ||
+                        c.company
+                          .toLowerCase()
+                          .includes(clientSearch.toLowerCase()),
+                    )
+                    .map((c) => (
+                      <CommandItem
+                        key={c.id.toString()}
+                        value={c.id.toString()}
+                        onSelect={(v) => {
+                          setForm((p) => ({ ...p, clientId: v }));
+                          setClientSearch("");
+                          setClientDropOpen(false);
+                        }}
+                      >
+                        <Check
+                          className={`mr-2 h-4 w-4 ${form.clientId === c.id.toString() ? "opacity-100" : "opacity-0"}`}
+                        />
+                        {c.name} – {c.company}
+                      </CommandItem>
+                    ))}
+                </CommandGroup>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Planned Date *</Label>
+          <Input
+            data-ocid="visits.date.input"
+            type="date"
+            value={form.plannedDate}
+            onChange={(e) =>
+              setForm((p) => ({ ...p, plannedDate: e.target.value }))
+            }
+            required
+          />
+        </div>
+      </div>
+
+      {/* From / To / Distance */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="space-y-1.5">
+          <Label>From (optional)</Label>
+          <Input
+            data-ocid="visits.from.input"
+            value={form.fromLocation}
+            onChange={(e) =>
+              setForm((p) => ({ ...p, fromLocation: e.target.value }))
+            }
+            placeholder="Departure"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>To (optional)</Label>
+          <Input
+            data-ocid="visits.to.input"
+            value={form.toLocation}
+            onChange={(e) =>
+              setForm((p) => ({ ...p, toLocation: e.target.value }))
+            }
+            placeholder="Destination"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Distance (km)</Label>
+          <Input
+            data-ocid="visits.distance.input"
+            type="number"
+            min="0"
+            value={form.distanceKm}
+            onChange={(e) =>
+              setForm((p) => ({ ...p, distanceKm: e.target.value }))
+            }
+            placeholder="0"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Purpose *</Label>
+        <Textarea
+          data-ocid="visits.purpose.textarea"
+          value={form.purpose}
+          onChange={(e) => setForm((p) => ({ ...p, purpose: e.target.value }))}
+          rows={3}
+          placeholder="Purpose of this visit..."
+          required
+        />
+      </div>
+      {/* Optional location capture */}
+      <div className="space-y-1.5">
+        <Label>Current Location (optional)</Label>
+        {form.capturedGps ? (
+          <div className="flex items-center gap-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-sm">
+            <MapPin size={14} className="text-emerald-600 flex-shrink-0" />
+            <span className="text-emerald-700 font-mono text-xs flex-1">
+              📍 {form.capturedGps.lat.toFixed(5)},{" "}
+              {form.capturedGps.lng.toFixed(5)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setForm((p) => ({ ...p, capturedGps: null }))}
+              className="text-emerald-600 hover:text-emerald-800"
+            >
+              <MapPinOff size={13} />
+            </button>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-ocid="visits.capture_location.button"
+            onClick={handleCaptureGps}
+            disabled={form.capturingGps}
+            className="w-full gap-2 text-xs"
+          >
+            {form.capturingGps ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <MapPin size={13} />
+            )}
+            {form.capturingGps ? "Capturing…" : "Capture Current Location"}
+          </Button>
+        )}
+      </div>
+      <DialogFooter>
+        <Button
+          type="button"
+          variant="outline"
+          data-ocid="visits.add.cancel_button"
+          onClick={onCancel}
+        >
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          data-ocid="visits.add.save_button"
+          disabled={isPending || !form.clientId}
+        >
+          {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          Plan Visit
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
 export default function VisitsPage() {
   const [activeTab, setActiveTab] = useState("all");
+  const [visitSearch, setVisitSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<bigint | null>(null);
@@ -398,7 +657,6 @@ export default function VisitsPage() {
     lng: number;
   } | null>(null);
   const [capturingCompleteGps, setCapturingCompleteGps] = useState(false);
-  const [form, setForm] = useState(emptyForm);
 
   // ── Check-in / Check-out State ───────────────────────────────────────────────
   const [checkInMap, setCheckInMap] = useState<Record<string, string>>(() => {
@@ -485,9 +743,16 @@ export default function VisitsPage() {
   const getClientName = (id: bigint) =>
     clients?.find((c) => c.id === id)?.name ?? `Client #${id}`;
 
-  const filtered = visits.filter(
-    (v) => activeTab === "all" || v.status === activeTab,
-  );
+  const filtered = visits.filter((v) => {
+    const matchTab = activeTab === "all" || v.status === activeTab;
+    if (!matchTab) return false;
+    if (!visitSearch.trim()) return true;
+    const q = visitSearch.toLowerCase();
+    return (
+      getClientName(v.clientId).toLowerCase().includes(q) ||
+      (v.purpose ?? "").toLowerCase().includes(q)
+    );
+  });
 
   const plannedCount = visits.filter((v) => v.status === "planned").length;
   const completedCount = visits.filter((v) => v.status === "completed").length;
@@ -557,20 +822,6 @@ export default function VisitsPage() {
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
-  const handleCaptureGpsForAdd = async () => {
-    setForm((p) => ({ ...p, capturingGps: true }));
-    const loc = await captureLocation();
-    setForm((p) => ({ ...p, capturingGps: false }));
-    if (loc) {
-      setForm((p) => ({ ...p, capturedGps: loc }));
-      toast.success(
-        `Location captured: ${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}`,
-      );
-    } else {
-      toast.error("Could not capture location");
-    }
-  };
-
   const handleCaptureGpsForComplete = async () => {
     setCapturingCompleteGps(true);
     const loc = await captureLocation();
@@ -585,31 +836,29 @@ export default function VisitsPage() {
     }
   };
 
-  const handleAdd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!identity || !form.clientId) return;
+  const handleAdd = async (values: AddVisitFormValues) => {
+    if (!identity || !values.clientId) return;
     try {
       const travelPurpose = encodeTravelMeta(
-        form.fromLocation,
-        form.toLocation,
-        form.distanceKm,
-        form.purpose.trim(),
+        values.fromLocation,
+        values.toLocation,
+        values.distanceKm,
+        values.purpose.trim(),
       );
-      const purposeWithGps = form.capturedGps
-        ? `${formatGPS(form.capturedGps.lat, form.capturedGps.lng)} ${travelPurpose}`
+      const purposeWithGps = values.capturedGps
+        ? `${formatGPS(values.capturedGps.lat, values.capturedGps.lng)} ${travelPurpose}`
         : travelPurpose;
       await createVisit.mutateAsync({
         id: 0n,
         userId: identity.getPrincipal() as Principal,
-        clientId: BigInt(form.clientId),
-        plannedDate: dateInputToNs(form.plannedDate),
+        clientId: BigInt(values.clientId),
+        plannedDate: dateInputToNs(values.plannedDate),
         purpose: purposeWithGps,
         status: Status.planned,
         completionNotes: "",
         completedAt: 0n,
       });
       toast.success("Visit planned");
-      setForm(emptyForm);
       setAddOpen(false);
     } catch {
       toast.error("Failed to plan visit");
@@ -750,11 +999,8 @@ export default function VisitsPage() {
         Status: v.status,
       };
     });
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Visit Plan");
     const monthStr = `${MONTH_NAMES[currentMonth]}${currentYear}`;
-    XLSX.writeFile(wb, `visit_plan_${monthStr}.xlsx`);
+    exportCSV(rows, `visit_plan_${monthStr}.csv`);
     toast.success("Excel exported");
   };
 
@@ -830,32 +1076,14 @@ export default function VisitsPage() {
     const ext = file.name.split(".").pop()?.toLowerCase();
 
     if (ext === "xlsx" || ext === "xls") {
-      // Parse Excel with SheetJS
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        try {
-          const data = new Uint8Array(ev.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: "array" });
-          const sheetName = workbook.SheetNames[0];
-          const sheet = workbook.Sheets[sheetName];
-          // Convert to array of arrays (header + rows)
-          const rows: string[][] = XLSX.utils.sheet_to_json(sheet, {
-            header: 1,
-            defval: "",
-            raw: false,
-          }) as string[][];
-          if (rows.length < 2) {
-            toast.error("Excel file is empty or has no data rows");
-            return;
-          }
-          setBulkRows(parseBulkRows(rows, clientList));
-        } catch {
-          toast.error("Failed to parse Excel file");
-        }
-      };
-      reader.readAsArrayBuffer(file);
-    } else {
-      // Parse CSV
+      // Parse Excel as CSV fallback (xlsx not available - please convert to CSV)
+      toast.error(
+        "Excel import not available. Please save as CSV and re-upload.",
+      );
+      return;
+    }
+    // Parse CSV
+    {
       const reader = new FileReader();
       reader.onload = (ev) => {
         const text = ev.target?.result as string;
@@ -1069,6 +1297,21 @@ export default function VisitsPage() {
             </p>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Search */}
+      <div className="relative max-w-sm">
+        <Search
+          size={16}
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          data-ocid="visits.search_input"
+          placeholder="Client ya purpose search karein..."
+          value={visitSearch}
+          onChange={(e) => setVisitSearch(e.target.value)}
+          className="pl-9"
+        />
       </div>
 
       {/* Table with Tabs + Calendar */}
@@ -1491,171 +1734,18 @@ export default function VisitsPage() {
       </Card>
 
       {/* Add Visit Dialog */}
-      <Dialog
-        open={addOpen}
-        onOpenChange={(o) => {
-          setAddOpen(o);
-          if (!o) setForm(emptyForm);
-        }}
-      >
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="max-w-lg" data-ocid="visits.add.dialog">
           <DialogHeader>
             <DialogTitle className="font-display">Plan New Visit</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleAdd} className="space-y-4 mt-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Client *</Label>
-                <Select
-                  value={form.clientId}
-                  onValueChange={(v) => setForm((p) => ({ ...p, clientId: v }))}
-                >
-                  <SelectTrigger data-ocid="visits.client.select">
-                    <SelectValue placeholder="Select client" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(clients ?? []).map((c) => (
-                      <SelectItem key={c.id.toString()} value={c.id.toString()}>
-                        {c.name} – {c.company}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Planned Date *</Label>
-                <Input
-                  data-ocid="visits.date.input"
-                  type="date"
-                  value={form.plannedDate}
-                  onChange={(e) =>
-                    setForm((p) => ({ ...p, plannedDate: e.target.value }))
-                  }
-                  required
-                />
-              </div>
-            </div>
-
-            {/* From / To / Distance */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label>From (optional)</Label>
-                <Input
-                  data-ocid="visits.from.input"
-                  value={form.fromLocation}
-                  onChange={(e) =>
-                    setForm((p) => ({ ...p, fromLocation: e.target.value }))
-                  }
-                  placeholder="Departure"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>To (optional)</Label>
-                <Input
-                  data-ocid="visits.to.input"
-                  value={form.toLocation}
-                  onChange={(e) =>
-                    setForm((p) => ({ ...p, toLocation: e.target.value }))
-                  }
-                  placeholder="Destination"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Distance (km)</Label>
-                <Input
-                  data-ocid="visits.distance.input"
-                  type="number"
-                  min="0"
-                  value={form.distanceKm}
-                  onChange={(e) =>
-                    setForm((p) => ({ ...p, distanceKm: e.target.value }))
-                  }
-                  placeholder="0"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Purpose *</Label>
-              <Textarea
-                data-ocid="visits.purpose.textarea"
-                value={form.purpose}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, purpose: e.target.value }))
-                }
-                rows={3}
-                placeholder="Purpose of this visit..."
-                required
-              />
-            </div>
-            {/* Optional location capture */}
-            <div className="space-y-1.5">
-              <Label>Current Location (optional)</Label>
-              {form.capturedGps ? (
-                <div className="flex items-center gap-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-sm">
-                  <MapPin
-                    size={14}
-                    className="text-emerald-600 flex-shrink-0"
-                  />
-                  <span className="text-emerald-700 font-mono text-xs flex-1">
-                    📍 {form.capturedGps.lat.toFixed(5)},{" "}
-                    {form.capturedGps.lng.toFixed(5)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setForm((p) => ({ ...p, capturedGps: null }))
-                    }
-                    className="text-emerald-600 hover:text-emerald-800"
-                  >
-                    <MapPinOff size={13} />
-                  </button>
-                </div>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  data-ocid="visits.capture_location.button"
-                  onClick={handleCaptureGpsForAdd}
-                  disabled={form.capturingGps}
-                  className="w-full gap-2 text-xs"
-                >
-                  {form.capturingGps ? (
-                    <Loader2 size={13} className="animate-spin" />
-                  ) : (
-                    <MapPin size={13} />
-                  )}
-                  {form.capturingGps
-                    ? "Capturing…"
-                    : "Capture Current Location"}
-                </Button>
-              )}
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                data-ocid="visits.add.cancel_button"
-                onClick={() => {
-                  setForm(emptyForm);
-                  setAddOpen(false);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                data-ocid="visits.add.save_button"
-                disabled={createVisit.isPending || !form.clientId}
-              >
-                {createVisit.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : null}
-                Plan Visit
-              </Button>
-            </DialogFooter>
-          </form>
+          <AddVisitForm
+            key={addOpen ? "open" : "closed"}
+            clients={clients}
+            isPending={createVisit.isPending}
+            onSubmit={handleAdd}
+            onCancel={() => setAddOpen(false)}
+          />
         </DialogContent>
       </Dialog>
 

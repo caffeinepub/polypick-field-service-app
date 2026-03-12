@@ -22,6 +22,13 @@ const DailyReportPage = lazy(() => import("./pages/DailyReportPage"));
 const AssistantPage = lazy(() => import("./pages/AssistantPage"));
 const ServiceTicketsPage = lazy(() => import("./pages/ServiceTicketsPage"));
 const TargetsPage = lazy(() => import("./pages/TargetsPage"));
+const ActivityTrackerPage = lazy(() => import("./pages/ActivityTrackerPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const LinerInstallationPage = lazy(
+  () => import("./pages/LinerInstallationPage"),
+);
+const StaffLocationPage = lazy(() => import("./pages/StaffLocationPage"));
+const WeeklyReportPage = lazy(() => import("./pages/WeeklyReportPage"));
 
 function PageLoader() {
   return (
@@ -154,6 +161,36 @@ const targetsRoute = createRoute({
   component: withSuspense(TargetsPage),
 });
 
+const activityTrackerRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/activity-tracker",
+  component: withSuspense(ActivityTrackerPage),
+});
+
+const settingsRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/settings",
+  component: withSuspense(SettingsPage),
+});
+
+const linerInstallationRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/liner-installation",
+  component: withSuspense(LinerInstallationPage),
+});
+
+const staffLocationRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/location-tracker",
+  component: withSuspense(StaffLocationPage),
+});
+
+const weeklyReportRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/weekly-report",
+  component: withSuspense(WeeklyReportPage),
+});
+
 export const routeTree = rootRoute.addChildren([
   loginRoute,
   profileSetupRoute,
@@ -172,5 +209,10 @@ export const routeTree = rootRoute.addChildren([
     assistantRoute,
     serviceTicketsRoute,
     targetsRoute,
+    activityTrackerRoute,
+    settingsRoute,
+    linerInstallationRoute,
+    staffLocationRoute,
+    weeklyReportRoute,
   ]),
 ]);

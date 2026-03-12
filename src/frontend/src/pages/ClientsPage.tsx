@@ -59,6 +59,7 @@ import {
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   type T__2,
@@ -158,7 +159,7 @@ const SAMPLE_CLIENTS = [
     notes: "[IND:Steel Plant] Ceramic liner + pallet plant inquiry",
   },
   {
-    name: "Contact",
+    name: "Shyam Metallic Khargpur",
     company: "Shyam Metallic Khargpur",
     phone: "",
     email: "",
@@ -166,7 +167,7 @@ const SAMPLE_CLIENTS = [
     notes: "[IND:Steel Plant] Roller offer finalization next week",
   },
   {
-    name: "Contact",
+    name: "IMFA Steel Jajpur",
     company: "IMFA Steel Jajpur",
     phone: "",
     email: "",
@@ -174,7 +175,7 @@ const SAMPLE_CLIENTS = [
     notes: "[IND:Steel Plant] New project inquiry this month",
   },
   {
-    name: "Contact",
+    name: "Gerawa Steel Barbil",
     company: "Gerawa Steel Barbil",
     phone: "",
     email: "",
@@ -212,6 +213,402 @@ const SAMPLE_CLIENTS = [
     email: "",
     address: "Dhanbad, Jharkhand",
     notes: "[IND:Other] Ceramic discussion, visit planned",
+  },
+];
+
+const RAIPUR_CLIENTS = [
+  // ── Raipur / CG ──────────────────────────────────────────────────────────
+  {
+    name: "Rajiv Sahu",
+    company: "Apl Apollo",
+    phone: "9685043812",
+    email: "",
+    address: "Raipur",
+    notes: "",
+  },
+  {
+    name: "ADK Sharma",
+    company: "ADK Sharma",
+    phone: "8349767774",
+    email: "",
+    address: "Raipur",
+    notes: "[Individual]",
+  },
+  {
+    name: "Anju Kumar",
+    company: "Solar Plant",
+    phone: "9109903242",
+    email: "",
+    address: "Chhattisgarh",
+    notes: "",
+  },
+  {
+    name: "Deva Sinha",
+    company: "Deva Sinha",
+    phone: "7974837632",
+    email: "",
+    address: "Raipur",
+    notes: "[Individual]",
+  },
+  {
+    name: "Chakrapani Sahu",
+    company: "Nakoda Group",
+    phone: "9630525568",
+    email: "",
+    address: "Raipur",
+    notes:
+      "Additional contact: Prem Sagar Vaishnav – 7611144406 (Alt: 8770404847)",
+  },
+  {
+    name: "Chetan Sahu",
+    company: "Hira Ferro",
+    phone: "7067590138",
+    email: "",
+    address: "Raipur",
+    notes: "Alt: 7049244665 | Additional contact: Dipankar Ghosh – 9098534727",
+  },
+  {
+    name: "Sky Alloys",
+    company: "Sky Alloys",
+    phone: "9301939859",
+    email: "",
+    address: "Raipur",
+    notes: "",
+  },
+  {
+    name: "Brijesh",
+    company: "Brijesh",
+    phone: "8770552514",
+    email: "",
+    address: "Raipur",
+    notes: "[Individual]",
+  },
+  {
+    name: "B K Tiwari",
+    company: "B K Tiwari",
+    phone: "8109111060",
+    email: "",
+    address: "Raipur",
+    notes: "[Individual]",
+  },
+  {
+    name: "B K Rana",
+    company: "Amalgam Steel",
+    phone: "7987346955",
+    email: "",
+    address: "Raipur",
+    notes: "",
+  },
+  {
+    name: "Abhro Dey",
+    company: "Abhro Dey",
+    phone: "9407962895",
+    email: "",
+    address: "Raipur",
+    notes: "[Individual]",
+  },
+  {
+    name: "Anand Singh",
+    company: "SKS Ispat",
+    phone: "9644356860",
+    email: "",
+    address: "Raipur",
+    notes: "",
+  },
+  {
+    name: "Amit Raj",
+    company: "Amit Raj",
+    phone: "7000803557",
+    email: "",
+    address: "Raipur",
+    notes: "[Individual]",
+  },
+  {
+    name: "Naktali Nag",
+    company: "Hira Ispat & Power",
+    phone: "9981921117",
+    email: "",
+    address: "Raipur",
+    notes: "",
+  },
+  {
+    name: "Ranjeet Choudhary",
+    company: "JR Group",
+    phone: "9584864555",
+    email: "",
+    address: "Raipur",
+    notes: "NR",
+  },
+  {
+    name: "Ramakant Soni",
+    company: "Jindal Energy",
+    phone: "8770786536",
+    email: "",
+    address: "Raipur",
+    notes: "",
+  },
+  {
+    name: "Ram Singh",
+    company: "Hira Steel",
+    phone: "6260017586",
+    email: "",
+    address: "Raipur",
+    notes: "Shutdown",
+  },
+  {
+    name: "Rahul Singh Rajput",
+    company: "Sarda Energy",
+    phone: "9300079799",
+    email: "",
+    address: "Raipur",
+    notes: "",
+  },
+  {
+    name: "Prem Pandit",
+    company: "Prem Pandit",
+    phone: "8827190394",
+    email: "",
+    address: "Raipur",
+    notes: "[Individual]",
+  },
+  {
+    name: "Mukesh Singh",
+    company: "Vandana Global",
+    phone: "7898012505",
+    email: "",
+    address: "Raipur",
+    notes: "Additional contact: Sanjay Baghel – 7225978822",
+  },
+  {
+    name: "Manveer Singh",
+    company: "Manveer Singh",
+    phone: "7987123787",
+    email: "",
+    address: "Raipur",
+    notes: "[Individual]",
+  },
+  {
+    name: "ML Nishad",
+    company: "ML Nishad",
+    phone: "9893900122",
+    email: "",
+    address: "Raipur",
+    notes: "[Individual]",
+  },
+  {
+    name: "Lokesh Dwivedi",
+    company: "Trader",
+    phone: "8120845383",
+    email: "",
+    address: "Raipur",
+    notes: "",
+  },
+  {
+    name: "Kishan Sahu",
+    company: "Jaisal Nitco",
+    phone: "7000968750",
+    email: "",
+    address: "Raipur",
+    notes: "",
+  },
+  {
+    name: "Hemant Pashime",
+    company: "Hemant Pashime",
+    phone: "9993280473",
+    email: "",
+    address: "Raipur",
+    notes: "[Individual]",
+  },
+  {
+    name: "Pawan Earaniha",
+    company: "Pawan Earaniha",
+    phone: "9977681986",
+    email: "",
+    address: "Raipur",
+    notes: "[Individual]",
+  },
+  {
+    name: "Nahir Ansari",
+    company: "SAIL",
+    phone: "9893984421",
+    email: "",
+    address: "Bhilai",
+    notes: "",
+  },
+  {
+    name: "Surya",
+    company: "Hira Power & Steel",
+    phone: "9752425385",
+    email: "",
+    address: "Raipur",
+    notes: "",
+  },
+  {
+    name: "Sudhir Kumar Singh",
+    company: "Jaiswal NITCO",
+    phone: "9109118324",
+    email: "",
+    address: "Raipur",
+    notes: "",
+  },
+  {
+    name: "Shridhar Rao",
+    company: "Shridhar Rao",
+    phone: "8806186169",
+    email: "",
+    address: "Raipur",
+    notes: "Switch Off | [Individual]",
+  },
+  {
+    name: "Shashank Singh",
+    company: "Shashank Singh",
+    phone: "9827045896",
+    email: "",
+    address: "Raipur",
+    notes: "Not Reachable | [Individual]",
+  },
+  {
+    name: "Satish Kumar",
+    company: "Bhagawati Power",
+    phone: "7999617779",
+    email: "",
+    address: "Raipur",
+    notes: "",
+  },
+  {
+    name: "Rohit Sahu",
+    company: "Nakodha Power",
+    phone: "7000445745",
+    email: "",
+    address: "Raipur",
+    notes: "",
+  },
+  {
+    name: "Pinku Singh",
+    company: "Pinku Singh",
+    phone: "9039208710",
+    email: "",
+    address: "Raipur",
+    notes: "[Individual]",
+  },
+  {
+    name: "Laxman Nirmalkar",
+    company: "Laxman Nirmalkar",
+    phone: "8959867345",
+    email: "",
+    address: "Raipur",
+    notes: "[Individual]",
+  },
+  {
+    name: "Anita Panday",
+    company: "Hira Group",
+    phone: "9727331827",
+    email: "",
+    address: "Raipur",
+    notes: "",
+  },
+  {
+    name: "Vijay Pandit",
+    company: "Vijay Pandit",
+    phone: "9229151414",
+    email: "",
+    address: "Raipur",
+    notes: "[Individual]",
+  },
+  {
+    name: "Vallury Rama Rao",
+    company: "Vallury Rama Rao",
+    phone: "9981677224",
+    email: "",
+    address: "Raipur",
+    notes: "[Individual]",
+  },
+  {
+    name: "Umesh Nishad",
+    company: "Umesh Nishad",
+    phone: "9009320291",
+    email: "",
+    address: "Raipur",
+    notes: "[Individual]",
+  },
+  {
+    name: "Santosh Sharma",
+    company: "Santosh Sharma",
+    phone: "8827396377",
+    email: "",
+    address: "Raipur",
+    notes: "Left Job | [Individual]",
+  },
+  {
+    name: "Pankaj Urmaliya",
+    company: "Braj Iron & Steel",
+    phone: "8818800059",
+    email: "",
+    address: "Raipur",
+    notes: "",
+  },
+  // ── Lloyds Steel & Energy (3 contacts grouped) ────────────────────────────
+  {
+    name: "Padmabhusan Gupta",
+    company: "Lloyds Steel & Energy",
+    phone: "9553607944",
+    email: "",
+    address: "Raipur",
+    notes:
+      "Additional contacts: Jaganath Raut – 7041303794 | Saran Mahgoan (HO) – 9437058214",
+  },
+  {
+    name: "Nitin Shelare",
+    company: "Uttam Galva",
+    phone: "7972025963",
+    email: "",
+    address: "Raipur",
+    notes: "Alt: 75887716671",
+  },
+  // ── Maharashtra ──────────────────────────────────────────────────────────
+  {
+    name: "Amol Gore",
+    company: "UTCL Manikgad",
+    phone: "9422884882",
+    email: "",
+    address: "Maharashtra",
+    notes:
+      "Additional contacts: Arjun Rajput – 6386316981 | Jeetendra Pandey – 9005099841",
+  },
+  // ── Chandrapur ───────────────────────────────────────────────────────────
+  {
+    name: "Pravin Channe",
+    company: "Dalmia Cement Bharat Ltd",
+    phone: "9156314211",
+    email: "",
+    address: "Chandrapur",
+    notes: "",
+  },
+  {
+    name: "Akhilesh Dadhore",
+    company: "ACC Chanda",
+    phone: "9480686099",
+    email: "",
+    address: "Chandrapur",
+    notes: "Additional contact: Mahantesh – 9164703684",
+  },
+  // ── Mukutwan ─────────────────────────────────────────────────────────────
+  {
+    name: "Sai Nath Aglave",
+    company: "RCCPL",
+    phone: "8007454738",
+    email: "",
+    address: "Mukutwan",
+    notes:
+      "Additional contacts: Sambhu Dayal Bhargav – 9145019166 | Akshay Srivastav – 8517948181",
+  },
+  {
+    name: "Gaurav Dhariwal",
+    company: "Power Plant",
+    phone: "9307900178",
+    email: "",
+    address: "Raipur",
+    notes: "",
   },
 ];
 
@@ -342,8 +739,10 @@ export default function ClientsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [deleteId, setDeleteId] = useState<bigint | null>(null);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [phoneError, setPhoneError] = useState("");
   const [isBulkAdding, setIsBulkAdding] = useState(false);
+  const [isBulkAddingRaipur, setIsBulkAddingRaipur] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isImportingExcel, setIsImportingExcel] = useState(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -445,6 +844,32 @@ export default function ClientsPage() {
     }
   };
 
+  const handleBulkAddRaipur = async () => {
+    if (!identity) return;
+    setIsBulkAddingRaipur(true);
+    try {
+      for (const c of RAIPUR_CLIENTS) {
+        await createClient.mutateAsync({
+          id: 0n,
+          name: c.name,
+          company: c.company,
+          phone: c.phone,
+          email: c.email,
+          address: c.address,
+          notes: c.notes,
+          createdAt: BigInt(Date.now()) * 1_000_000n,
+          updatedAt: BigInt(Date.now()) * 1_000_000n,
+          createdBy: identity.getPrincipal() as Principal,
+        });
+      }
+      toast.success("48 Raipur/CG clients added successfully!");
+    } catch {
+      toast.error("Failed to add some clients. Please try again.");
+    } finally {
+      setIsBulkAddingRaipur(false);
+    }
+  };
+
   const handleCSVImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !identity) return;
@@ -498,27 +923,41 @@ export default function ClientsPage() {
     if (!file || !identity) return;
     e.target.value = "";
     setIsImportingExcel(true);
-    toast("Importing from CSV/Excel (save as CSV first)...");
+    toast("Importing from Excel/CSV...");
     try {
-      const text = await file.text();
-      // Support both comma and tab separated
-      const lines = text
-        .split(/\r?\n/)
-        .map((l) => l.trim())
-        .filter(Boolean);
-      const dataLines = lines.slice(1);
+      const isXlsx = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
+      let rows: string[][] = [];
+      if (isXlsx) {
+        const buffer = await file.arrayBuffer();
+        const wb = XLSX.read(buffer, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json<string[]>(ws, {
+          header: 1,
+          defval: "",
+        });
+        rows = (data as string[][]).slice(1);
+      } else {
+        const text = await file.text();
+        const rawLines = text
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .slice(1);
+        rows = rawLines.map((line) => {
+          const sep = line.includes("\t") ? "\t" : ",";
+          return line.split(sep).map((c) => c.replace(/^"|"$/g, "").trim());
+        });
+      }
       let count = 0;
-      for (const line of dataLines) {
-        const sep = line.includes("\t") ? "\t" : ",";
-        const cols = line.split(sep);
-        const name = (cols[0] ?? "").replace(/^"|"$/g, "").trim();
+      for (const cols of rows) {
+        const name = String(cols[0] ?? "").trim();
         if (!name) continue;
-        const company = (cols[1] ?? "").replace(/^"|"$/g, "").trim();
-        const phone = (cols[2] ?? "").replace(/^"|"$/g, "").trim();
-        const email = (cols[3] ?? "").replace(/^"|"$/g, "").trim();
-        const address = (cols[4] ?? "").replace(/^"|"$/g, "").trim();
-        const industry = (cols[5] ?? "").replace(/^"|"$/g, "").trim();
-        const rawNotes = (cols[6] ?? "").replace(/^"|"$/g, "").trim();
+        const company = String(cols[1] ?? "").trim();
+        const phone = String(cols[2] ?? "").trim();
+        const email = String(cols[3] ?? "").trim();
+        const address = String(cols[4] ?? "").trim();
+        const industry = String(cols[5] ?? "").trim();
+        const rawNotes = String(cols[6] ?? "").trim();
         const notes = encodeIndustry(rawNotes, industry);
         await createClient.mutateAsync({
           id: 0n,
@@ -535,8 +974,9 @@ export default function ClientsPage() {
         count++;
       }
       toast.success(`${count} client${count !== 1 ? "s" : ""} imported!`);
-    } catch {
-      toast.error("Import failed. Please save the Excel file as CSV first.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Import failed. Please check the file format.");
     } finally {
       setIsImportingExcel(false);
     }
@@ -554,6 +994,22 @@ export default function ClientsPage() {
   };
 
   // ── Phone Contact Picker ──────────────────────────────────────────────────
+  const handleDeleteAll = async () => {
+    const allClients = clients ?? [];
+    setIsDeleting(true);
+    try {
+      for (const c of allClients) {
+        await deleteClient.mutateAsync(c.id);
+      }
+      toast.success(`${allClients.length} clients deleted`);
+      setDeleteAllOpen(false);
+    } catch {
+      toast.error("Failed to delete all clients");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handlePhoneImport = async () => {
     if (!(navigator as any).contacts) {
@@ -755,6 +1211,19 @@ export default function ClientsPage() {
             </Button>
           )}
 
+          {/* Delete All Clients */}
+          {!isLoading && (clients ?? []).length > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              data-ocid="clients.delete_all.button"
+              onClick={() => setDeleteAllOpen(true)}
+              className="gap-2"
+            >
+              <Trash2 size={15} />
+              Delete All
+            </Button>
+          )}
           {!isLoading && (clients ?? []).length === 0 && (
             <Button
               variant="outline"
@@ -771,6 +1240,20 @@ export default function ClientsPage() {
               {isBulkAdding ? "Adding..." : "Add Sample Clients"}
             </Button>
           )}
+          <Button
+            variant="outline"
+            data-ocid="clients.raipur.primary_button"
+            onClick={handleBulkAddRaipur}
+            disabled={isBulkAddingRaipur || !identity}
+            className="gap-2 border-blue-400 text-blue-700"
+          >
+            {isBulkAddingRaipur ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Database size={16} />
+            )}
+            {isBulkAddingRaipur ? "Adding..." : "Add Raipur/CG Clients (48)"}
+          </Button>
 
           <Dialog
             open={addOpen}
@@ -1205,15 +1688,9 @@ export default function ClientsPage() {
             <TableRow className="bg-muted/30">
               <TableHead className="font-semibold">Name</TableHead>
               <TableHead className="font-semibold">Company</TableHead>
-              <TableHead className="font-semibold hidden md:table-cell">
-                Industry
-              </TableHead>
-              <TableHead className="font-semibold hidden md:table-cell">
-                Phone
-              </TableHead>
-              <TableHead className="font-semibold hidden lg:table-cell">
-                Email
-              </TableHead>
+              <TableHead className="font-semibold">Mobile</TableHead>
+              <TableHead className="font-semibold">Industry</TableHead>
+
               <TableHead className="w-24 text-right font-semibold">
                 Actions
               </TableHead>
@@ -1230,15 +1707,13 @@ export default function ClientsPage() {
                   <TableCell>
                     <Skeleton className="h-4 w-40" />
                   </TableCell>
-                  <TableCell className="hidden md:table-cell">
-                    <Skeleton className="h-4 w-24" />
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell">
+                  <TableCell>
                     <Skeleton className="h-4 w-28" />
                   </TableCell>
-                  <TableCell className="hidden lg:table-cell">
-                    <Skeleton className="h-4 w-36" />
+                  <TableCell>
+                    <Skeleton className="h-4 w-24" />
                   </TableCell>
+
                   <TableCell>
                     <Skeleton className="h-4 w-16 ml-auto" />
                   </TableCell>
@@ -1247,7 +1722,7 @@ export default function ClientsPage() {
             ) : filtered.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={5}
                   data-ocid="clients.empty_state"
                   className="text-center py-12 text-muted-foreground"
                 >
@@ -1294,7 +1769,20 @@ export default function ClientsPage() {
                     <TableCell className="text-muted-foreground">
                       {client.company}
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className="text-muted-foreground text-sm">
+                      {client.phone ? (
+                        <span className="flex items-center gap-1">
+                          <Smartphone
+                            size={12}
+                            className="text-muted-foreground"
+                          />
+                          {client.phone}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       {industry ? (
                         <Badge
                           variant="outline"
@@ -1306,12 +1794,7 @@ export default function ClientsPage() {
                         <span className="text-muted-foreground text-xs">—</span>
                       )}
                     </TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground">
-                      {client.phone || "—"}
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell text-muted-foreground">
-                      {client.email || "—"}
-                    </TableCell>
+
                     <TableCell className="hidden xl:table-cell">
                       {(() => {
                         const lastDate = lastVisitMap.get(client.id.toString());
@@ -1398,6 +1881,37 @@ export default function ClientsPage() {
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {/* ── Delete All Clients AlertDialog ──────────────────────────────── */}
+      <AlertDialog
+        open={deleteAllOpen}
+        onOpenChange={(o) => !o && setDeleteAllOpen(false)}
+      >
+        <AlertDialogContent data-ocid="clients.delete_all.dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Saare Clients Delete Karein?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Yeh action SAARE clients aur unka data permanently delete kar
+              dega. Yeh undo nahi ho sakta. Kya aap sure hain?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-ocid="clients.delete_all.cancel_button">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              data-ocid="clients.delete_all.confirm_button"
+              onClick={handleDeleteAll}
+              className="bg-destructive hover:bg-destructive/90"
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              {isDeleting ? "Deleting..." : "Delete All"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

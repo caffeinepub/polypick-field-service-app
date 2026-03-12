@@ -1,33 +1,30 @@
 # Polypick Engineers Field Service App
 
 ## Current State
-App has: Dashboard, Clients, PPI/Interactions, TA DA, Visits, Daily Report, Reports, Staff, Marketing Report, Profile. BottomNav has 5 items. No personal assistant module exists.
+Full-featured field service app with: Clients, PPI, TA DA, Visit Planner, Daily Report, Marketing Report, Liner Installation, Service Tickets, Targets, Activity Tracker, Reports, Staff, Settings, Polypick Assistant pages. Sidebar navigation with admin-only links. Mobile-first layout with bottom nav.
 
 ## Requested Changes (Diff)
 
 ### Add
-- New page: `/assistant` — Polypick Assistant (Smart Rule-Based)
-  - **Daily Briefing card**: Today's date, visits planned today, pending TA DA claims, pending follow-ups count, pipeline stuck items
-  - **Smart Reminders**: List of auto-generated reminders based on app data (e.g., visits not checked-in, claims pending >3 days)
-  - **Pipeline Alerts**: Enquiries/offers stuck >30 days highlighted as action items
-  - **Quick Commands**: Search box where user types commands like "add visit", "check TA DA", "add client" and gets shortcut buttons to navigate directly
-  - **My To-Do List**: Add, check off, delete personal to-do items (stored in localStorage)
-  - **Quick Notes**: A small notepad section (stored in localStorage)
-  - **Follow-up Tracker**: List of follow-ups with due dates, add/complete/delete (localStorage)
-  - **Monthly Performance Summary**: Stats for current month (visits done vs planned, claims submitted, PPI entries added)
-- New bottom nav item: "Assistant" with Bot icon, replacing one of existing 5 items or adding as 6th (keep all 5, but replace "Report" with "More" linking to assistant + report)
+1. **Staff Location Tracker Page** (`/location-tracker`) -- Admin-only page showing field staff GPS check-in locations. Staff can check-in with GPS (browser geolocation API), check-out, add visit notes. Admin sees all staff locations on a simple list/card view with map link (opens Google Maps). Data stored in localStorage per staff.
+2. **Weekly Report Page** (`/weekly-report`) -- Auto-generates weekly summary: visits count, PPI entries, TA DA claims, top clients, daily activity. "Download PDF" button for the report. Accessible via Sidebar.
+3. **Outlook Web Link Button** -- On ClientDetailPage contacts section, add a mail icon button that opens `https://outlook.live.com/mail/0/new?to={email}` in new tab. Already have Email Compose button but this specifically opens Outlook Web.
+4. **Email Log Tab** -- Add "Email Log" tab in ClientDetailPage (alongside existing tabs). Users can add manual email log entries (subject, date, direction Sent/Received, summary). Stored in localStorage.
+5. **Offline Mode Indicator** -- Small banner/pill in the app header/top area showing online/offline status using browser `navigator.onLine` + `online`/`offline` events. When offline, show amber "Offline" badge. When back online, show brief "Back Online" toast.
 
 ### Modify
-- `routeTree.tsx`: Add `/assistant` route
-- `BottomNav.tsx`: Replace "Report" link with "Assistant" (Bot icon); move daily report access to assistant page or sidebar
+- **Sidebar.tsx** -- Add "Location Tracker" (MapPin icon, adminOnly) and "Weekly Report" (FileBarChart icon) nav items.
+- **routeTree.tsx** -- Add routes for `/location-tracker` and `/weekly-report`.
+- **RootLayout.tsx** -- Add offline indicator component.
 
 ### Remove
-- Nothing removed
+Nothing removed.
 
 ## Implementation Plan
-1. Create `AssistantPage.tsx` with all sections: Daily Briefing, Smart Reminders, Pipeline Alerts, Quick Commands, To-Do List, Quick Notes, Follow-up Tracker, Monthly Summary
-2. Use existing hooks (useMyVisits, useAllVisits, useMyClaims, useAllClaims, usePipelineStats, useIsAdmin) for real data
-3. Store To-Do, Notes, Follow-ups in localStorage with typed helpers
-4. Update `routeTree.tsx` to add `/assistant` lazy route
-5. Update `BottomNav.tsx`: replace "Report" with "Assistant" (Bot icon)
-6. Add a quick-access link to Daily Report from the Assistant page
+1. Create `StaffLocationPage.tsx` -- GPS check-in/out, staff location list, Google Maps link.
+2. Create `WeeklyReportPage.tsx` -- Reads localStorage data to compute weekly stats, renders summary, PDF export via window.print().
+3. Create `OfflineIndicator.tsx` -- useOnlineStatus hook, show banner when offline.
+4. Modify `ClientDetailPage.tsx` -- Add Email Log tab with add/list entries.
+5. Modify `Sidebar.tsx` -- Add 2 new nav items.
+6. Modify `routeTree.tsx` -- Register 2 new routes.
+7. Modify `RootLayout.tsx` -- Include OfflineIndicator.

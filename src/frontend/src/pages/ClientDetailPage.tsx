@@ -17,6 +17,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +36,7 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Building2,
+  ExternalLink,
   FileText,
   Loader2,
   Mail,
@@ -139,6 +141,54 @@ function useCompetitors(clientId: string) {
   return { competitors, add, remove };
 }
 
+// ── Email Log ──────────────────────────────────────────────────────────────
+interface EmailLogEntry {
+  id: string;
+  clientId: string;
+  subject: string;
+  date: string;
+  direction: string;
+  summary: string;
+  createdAt: string;
+}
+
+function useEmailLogs(clientId: string) {
+  const key = "polypick_email_logs";
+  const [logs, setLogs] = useState<EmailLogEntry[]>(() => {
+    try {
+      const all: EmailLogEntry[] = JSON.parse(
+        localStorage.getItem(key) ?? "[]",
+      );
+      return all.filter((l) => l.clientId === clientId);
+    } catch {
+      return [];
+    }
+  });
+
+  const addLog = (
+    entry: Omit<EmailLogEntry, "id" | "clientId" | "createdAt">,
+  ) => {
+    const newEntry: EmailLogEntry = {
+      ...entry,
+      id: String(Date.now()),
+      clientId,
+      createdAt: new Date().toISOString(),
+    };
+    const all: EmailLogEntry[] = (() => {
+      try {
+        return JSON.parse(localStorage.getItem(key) ?? "[]");
+      } catch {
+        return [];
+      }
+    })();
+    const updated = [...all, newEntry];
+    localStorage.setItem(key, JSON.stringify(updated));
+    setLogs(updated.filter((l) => l.clientId === clientId));
+  };
+
+  return { logs, addLog };
+}
+
 export default function ClientDetailPage() {
   const { id } = useParams({ from: "/layout/clients/$id" });
   const navigate = useNavigate();
@@ -170,6 +220,7 @@ export default function ClientDetailPage() {
   const [addContactOpen, setAddContactOpen] = useState(false);
   const [editContact, setEditContact] = useState<ClientContact | null>(null);
   const [deleteContactId, setDeleteContactId] = useState<string | null>(null);
+  const [deleteAllContactsOpen, setDeleteAllContactsOpen] = useState(false);
   const [contactForm, setContactForm] = useState(emptyContactForm);
   const [isSavingContact, setIsSavingContact] = useState(false);
 
@@ -192,6 +243,15 @@ export default function ClientDetailPage() {
     add: addCompetitor,
     remove: removeCompetitor,
   } = useCompetitors(id);
+
+  const { logs: emailLogs, addLog: addEmailLog } = useEmailLogs(id);
+  const [emailLogDialogOpen, setEmailLogDialogOpen] = useState(false);
+  const [emailLogForm, setEmailLogForm] = useState({
+    subject: "",
+    date: new Date().toISOString().slice(0, 10),
+    direction: "Sent",
+    summary: "",
+  });
   const [addCompetitorOpen, setAddCompetitorOpen] = useState(false);
   const [competitorForm, setCompetitorForm] = useState({
     companyName: "",
@@ -363,6 +423,19 @@ export default function ClientDetailPage() {
       setDeleteContactId(null);
     } catch {
       toast.error("Failed to remove contact");
+    } finally {
+      setIsSavingContact(false);
+    }
+  };
+
+  const handleDeleteAllContacts = async () => {
+    setIsSavingContact(true);
+    try {
+      await saveContactsToBackend([]);
+      toast.success("All contacts removed");
+      setDeleteAllContactsOpen(false);
+    } catch {
+      toast.error("Failed to remove contacts");
     } finally {
       setIsSavingContact(false);
     }
@@ -569,6 +642,22 @@ export default function ClientDetailPage() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger
+            value="email-log"
+            data-ocid="client.email_log.tab"
+            className="gap-2"
+          >
+            <ExternalLink size={14} />
+            Email Log
+            {emailLogs.length > 0 && (
+              <Badge
+                variant="secondary"
+                className="ml-1 h-5 min-w-5 px-1 text-xs"
+              >
+                {emailLogs.length}
+              </Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         {/* ── Contacts Tab ──────────────────────────────────────────────────── */}
@@ -590,7 +679,22 @@ export default function ClientDetailPage() {
               {client.email && (
                 <div className="flex items-center gap-3 text-sm">
                   <Mail size={14} className="text-muted-foreground shrink-0" />
-                  <span className="break-all">{client.email}</span>
+                  <span className="break-all flex-1">{client.email}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-blue-600 hover:text-blue-700"
+                    title="Open in Outlook Web"
+                    onClick={() =>
+                      window.open(
+                        `https://outlook.live.com/mail/0/new?to=${encodeURIComponent(client.email ?? "")}`,
+                        "_blank",
+                      )
+                    }
+                    data-ocid="client.outlook.button"
+                  >
+                    <ExternalLink size={12} />
+                  </Button>
                 </div>
               )}
               {client.address && (
@@ -647,6 +751,18 @@ export default function ClientDetailPage() {
                 <Plus size={14} />
                 Add Contact
               </Button>
+              {contacts.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  data-ocid="contact.delete_all.button"
+                  onClick={() => setDeleteAllContactsOpen(true)}
+                  className="gap-2"
+                >
+                  <Trash2 size={14} />
+                  Delete All
+                </Button>
+              )}
             </div>
           </div>
 
@@ -717,7 +833,24 @@ export default function ClientDetailPage() {
                         {contact.email && (
                           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                             <Mail size={11} />
-                            <span className="break-all">{contact.email}</span>
+                            <span className="break-all flex-1">
+                              {contact.email}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5 text-blue-600 hover:text-blue-700"
+                              title="Open in Outlook Web"
+                              onClick={() =>
+                                window.open(
+                                  `https://outlook.live.com/mail/0/new?to=${encodeURIComponent(contact.email ?? "")}`,
+                                  "_blank",
+                                )
+                              }
+                              data-ocid={`contact.outlook_button.${idx + 1}`}
+                            >
+                              <ExternalLink size={10} />
+                            </Button>
                           </div>
                         )}
                       </div>
@@ -969,6 +1102,178 @@ export default function ClientDetailPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+        </TabsContent>
+
+        {/* ── Email Log Tab ─────────────────────────────────────────────────── */}
+        <TabsContent value="email-log" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              Email communications with this client.
+            </p>
+            <Dialog
+              open={emailLogDialogOpen}
+              onOpenChange={setEmailLogDialogOpen}
+            >
+              <DialogTrigger asChild>
+                <Button
+                  size="sm"
+                  data-ocid="client.email_log.open_modal_button"
+                >
+                  + Add Email Log
+                </Button>
+              </DialogTrigger>
+              <DialogContent data-ocid="client.email_log.dialog">
+                <DialogHeader>
+                  <DialogTitle className="font-display">
+                    Add Email Log
+                  </DialogTitle>
+                </DialogHeader>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!emailLogForm.subject.trim()) return;
+                    addEmailLog(emailLogForm);
+                    setEmailLogForm({
+                      subject: "",
+                      date: new Date().toISOString().slice(0, 10),
+                      direction: "Sent",
+                      summary: "",
+                    });
+                    setEmailLogDialogOpen(false);
+                  }}
+                  className="space-y-3 mt-2"
+                >
+                  <div className="space-y-1.5">
+                    <Label>Subject *</Label>
+                    <Input
+                      required
+                      value={emailLogForm.subject}
+                      onChange={(e) =>
+                        setEmailLogForm((p) => ({
+                          ...p,
+                          subject: e.target.value,
+                        }))
+                      }
+                      placeholder="Email subject..."
+                      data-ocid="client.email_log.subject.input"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Date</Label>
+                      <Input
+                        type="date"
+                        value={emailLogForm.date}
+                        onChange={(e) =>
+                          setEmailLogForm((p) => ({
+                            ...p,
+                            date: e.target.value,
+                          }))
+                        }
+                        data-ocid="client.email_log.date.input"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Direction</Label>
+                      <select
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        value={emailLogForm.direction}
+                        onChange={(e) =>
+                          setEmailLogForm((p) => ({
+                            ...p,
+                            direction: e.target.value,
+                          }))
+                        }
+                        data-ocid="client.email_log.direction.select"
+                      >
+                        <option value="Sent">Sent</option>
+                        <option value="Received">Received</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Summary / Notes</Label>
+                    <Textarea
+                      rows={3}
+                      value={emailLogForm.summary}
+                      onChange={(e) =>
+                        setEmailLogForm((p) => ({
+                          ...p,
+                          summary: e.target.value,
+                        }))
+                      }
+                      placeholder="Brief summary of the email..."
+                      data-ocid="client.email_log.summary.textarea"
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setEmailLogDialogOpen(false)}
+                      data-ocid="client.email_log.cancel_button"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      data-ocid="client.email_log.submit_button"
+                    >
+                      Save
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          {emailLogs.length === 0 ? (
+            <div
+              className="text-center py-12 text-muted-foreground text-sm"
+              data-ocid="client.email_log.empty_state"
+            >
+              No email logs yet. Add your first email record.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {emailLogs.map((log, idx) => (
+                <Card
+                  key={log.id}
+                  data-ocid={`client.email_log.item.${idx + 1}`}
+                >
+                  <CardContent className="py-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant="secondary"
+                            className={
+                              log.direction === "Sent"
+                                ? "bg-green-100 text-green-700 border-green-200"
+                                : "bg-blue-100 text-blue-700 border-blue-200"
+                            }
+                          >
+                            {log.direction}
+                          </Badge>
+                          <span className="font-medium text-sm truncate">
+                            {log.subject}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {log.date}
+                        </p>
+                        {log.summary && (
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {log.summary}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 
@@ -1606,6 +1911,37 @@ export default function ClientDetailPage() {
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
               Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {/* ── Delete All Contacts AlertDialog ──────────────────────────────── */}
+      <AlertDialog
+        open={deleteAllContactsOpen}
+        onOpenChange={(o) => !o && setDeleteAllContactsOpen(false)}
+      >
+        <AlertDialogContent data-ocid="contact.delete_all.dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete All Contacts?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Yeh action is client ke SAARE contacts delete kar dega. Yeh undo
+              nahi ho sakta.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-ocid="contact.delete_all.cancel_button">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              data-ocid="contact.delete_all.confirm_button"
+              onClick={handleDeleteAllContacts}
+              className="bg-destructive hover:bg-destructive/90"
+              disabled={isSavingContact}
+            >
+              {isSavingContact ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Delete All
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
