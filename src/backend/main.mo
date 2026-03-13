@@ -189,7 +189,6 @@ actor {
         Runtime.trap("Client not found");
       };
       case (?existingClient) {
-        // Only the creator or admin can update
         if (existingClient.createdBy != caller and not AccessControl.isAdmin(accessControlState, caller)) {
           Runtime.trap("Unauthorized: Only the creator or admin can update this client");
         };
@@ -222,7 +221,6 @@ actor {
         Runtime.trap("Client not found");
       };
       case (?existingClient) {
-        // Only the creator or admin can delete
         if (existingClient.createdBy != caller and not AccessControl.isAdmin(accessControlState, caller)) {
           Runtime.trap("Unauthorized: Only the creator or admin can delete this client");
         };
@@ -230,6 +228,24 @@ actor {
         clients.remove(id);
       };
     };
+  };
+
+  // Bulk delete all clients (admin only) - much faster than deleting one by one
+  public shared ({ caller }) func deleteAllClients() : async Nat {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      // Also allow regular users to delete their own clients in bulk
+      let myIds = clients.entries().toArray().filter(func(entry) { entry.1.createdBy == caller });
+      for (entry in myIds.vals()) {
+        clients.remove(entry.0);
+      };
+      return myIds.size();
+    };
+    // Admin: delete all
+    let allIds = clients.keys().toArray();
+    for (id in allIds.vals()) {
+      clients.remove(id);
+    };
+    allIds.size();
   };
 
   public query ({ caller }) func getClient(id : Nat) : async ?Client.T {
@@ -283,7 +299,6 @@ actor {
         Runtime.trap("Interaction not found");
       };
       case (?existingInteraction) {
-        // Only the creator or admin can update
         if (existingInteraction.createdBy != caller and not AccessControl.isAdmin(accessControlState, caller)) {
           Runtime.trap("Unauthorized: Only the creator or admin can update this interaction");
         };
@@ -316,7 +331,6 @@ actor {
         Runtime.trap("Interaction not found");
       };
       case (?existingInteraction) {
-        // Only the creator or admin can delete
         if (existingInteraction.createdBy != caller and not AccessControl.isAdmin(accessControlState, caller)) {
           Runtime.trap("Unauthorized: Only the creator or admin can delete this interaction");
         };
@@ -456,7 +470,6 @@ actor {
         Runtime.trap("Visit log not found");
       };
       case (?existingVisit) {
-        // Only the creator or admin can update
         if (existingVisit.userId != caller and not AccessControl.isAdmin(accessControlState, caller)) {
           Runtime.trap("Unauthorized: Only the creator or admin can update this visit log");
         };
@@ -487,7 +500,6 @@ actor {
         Runtime.trap("Visit log not found");
       };
       case (?existingVisit) {
-        // Only the creator or admin can delete
         if (existingVisit.userId != caller and not AccessControl.isAdmin(accessControlState, caller)) {
           Runtime.trap("Unauthorized: Only the creator or admin can delete this visit log");
         };

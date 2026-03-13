@@ -5,7 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
+  AlertTriangle,
   ArrowRight,
+  Bell,
   CalendarCheck,
   CheckCircle2,
   Clock,
@@ -13,10 +15,20 @@ import {
   LayoutDashboard,
   Receipt,
   Search,
+  Ticket,
   TrendingUp,
   Users,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { StatusBadge } from "../components/StatusBadge";
 import {
   useAllClaims,
@@ -314,6 +326,18 @@ export default function DashboardPage() {
   const pendingClaims =
     activeClaims?.filter((c) => c.status === "pending") ?? [];
 
+  // Overdue PPI: entries older than 15 days with no update
+  const now = new Date();
+  const { data: allInteractions } = useInteractions();
+  const overdueFollowups = (allInteractions ?? []).filter((i) => {
+    if (i.status === "won" || i.status === "lost" || i.status === "closed")
+      return false;
+    const created = new Date(Number(i.date / 1_000_000n));
+    const diffDays =
+      (now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24);
+    return diffDays > 15;
+  });
+
   const todayVisits =
     activeVisits?.filter((v) => {
       const visitDate = new Date(Number(v.plannedDate / 1_000_000n));
@@ -352,6 +376,50 @@ export default function DashboardPage() {
 
       {/* Global Search */}
       <GlobalSearch />
+
+      {/* Smart Notifications Banner */}
+      {(() => {
+        const chips: { label: string; color: string; icon: React.ReactNode }[] =
+          [];
+        if (todayVisits.length > 0) {
+          chips.push({
+            label: `Aaj ${todayVisits.length} visit${todayVisits.length !== 1 ? "s" : ""} planned`,
+            color: "bg-amber-50 border-amber-200 text-amber-800",
+            icon: <CalendarCheck size={13} />,
+          });
+        }
+        if (isAdmin && pendingClaims.length > 0) {
+          chips.push({
+            label: `${pendingClaims.length} TA DA pending approval`,
+            color: "bg-red-50 border-red-200 text-red-800",
+            icon: <Receipt size={13} />,
+          });
+        }
+        if (overdueFollowups.length > 0) {
+          chips.push({
+            label: `${overdueFollowups.length} follow-up${overdueFollowups.length !== 1 ? "s" : ""} overdue`,
+            color: "bg-orange-50 border-orange-200 text-orange-800",
+            icon: <AlertTriangle size={13} />,
+          });
+        }
+        if (chips.length === 0) return null;
+        return (
+          <div
+            data-ocid="dashboard.notifications.section"
+            className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1"
+          >
+            {chips.map((chip) => (
+              <div
+                key={chip.label}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium whitespace-nowrap flex-shrink-0 ${chip.color}`}
+              >
+                {chip.icon}
+                {chip.label}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Quick Actions */}
       <div>
@@ -434,6 +502,28 @@ export default function DashboardPage() {
             href="/visits"
             color="bg-purple-50"
           />
+          <StatCard
+            title="Open Service Tickets"
+            value={
+              (allInteractions ?? []).filter(
+                (i) =>
+                  i.type === "service" &&
+                  i.status !== "closed" &&
+                  i.status !== "won",
+              ).length
+            }
+            icon={<Ticket size={22} className="text-rose-700" />}
+            href="/service-tickets"
+            color="bg-rose-50"
+          />
+          <StatCard
+            title="Overdue Follow-ups"
+            value={overdueFollowups.length}
+            icon={<Bell size={22} className="text-orange-700" />}
+            href="/interactions"
+            color="bg-orange-50"
+            badgeCount={overdueFollowups.length}
+          />
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -453,6 +543,125 @@ export default function DashboardPage() {
           />
         </div>
       )}
+
+      {/* Monthly KPI Chart */}
+      <div>
+        <h2 className="font-display text-base font-semibold text-foreground mb-3 flex items-center gap-2">
+          <TrendingUp size={16} className="text-primary" />
+          Monthly Performance
+        </h2>
+        <Card>
+          <CardContent className="pt-4">
+            {(() => {
+              const months: {
+                month: string;
+                Visits: number;
+                PPI: number;
+                Claims: number;
+              }[] = [];
+              const n = new Date();
+              for (let i = 5; i >= 0; i--) {
+                const d = new Date(n.getFullYear(), n.getMonth() - i, 1);
+                const label = d.toLocaleDateString("en-IN", { month: "short" });
+                const m = d.getMonth();
+                const y = d.getFullYear();
+                const visits = (activeVisits ?? []).filter((v) => {
+                  const vd = new Date(Number(v.plannedDate / 1_000_000n));
+                  return (
+                    vd.getMonth() === m &&
+                    vd.getFullYear() === y &&
+                    v.status === "completed"
+                  );
+                }).length;
+                const ppis = (allInteractions ?? []).filter((int) => {
+                  const id = new Date(Number(int.date / 1_000_000n));
+                  return id.getMonth() === m && id.getFullYear() === y;
+                }).length;
+                const claims = (activeClaims ?? []).filter((c) => {
+                  const cd = new Date(Number(c.submittedAt / 1_000_000n));
+                  return cd.getMonth() === m && cd.getFullYear() === y;
+                }).length;
+                months.push({
+                  month: label,
+                  Visits: visits,
+                  PPI: ppis,
+                  Claims: claims,
+                });
+              }
+              return (
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart
+                    data={months}
+                    margin={{ top: 5, right: 10, bottom: 5, left: -10 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="oklch(0.88 0.01 255)"
+                    />
+                    <XAxis
+                      dataKey="month"
+                      tick={{ fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: "8px",
+                        border: "1px solid oklch(0.88 0.01 255)",
+                        fontSize: 12,
+                      }}
+                    />
+                    <Bar
+                      dataKey="Visits"
+                      fill="oklch(0.55 0.18 260)"
+                      radius={[4, 4, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="PPI"
+                      fill="oklch(0.6 0.16 150)"
+                      radius={[4, 4, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="Claims"
+                      fill="oklch(0.7 0.15 70)"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              );
+            })()}
+            <div className="flex gap-4 mt-2 justify-center">
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span
+                  className="w-3 h-3 rounded-sm inline-block"
+                  style={{ background: "oklch(0.55 0.18 260)" }}
+                />
+                Visits
+              </span>
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span
+                  className="w-3 h-3 rounded-sm inline-block"
+                  style={{ background: "oklch(0.6 0.16 150)" }}
+                />
+                PPI
+              </span>
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span
+                  className="w-3 h-3 rounded-sm inline-block"
+                  style={{ background: "oklch(0.7 0.15 70)" }}
+                />
+                Claims
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Today's Visits + Pending Claims */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

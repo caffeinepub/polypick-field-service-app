@@ -45,6 +45,7 @@ import {
   Pencil,
   Phone,
   Plus,
+  Printer,
   Smartphone,
   Swords,
   Trash2,
@@ -187,6 +188,48 @@ function useEmailLogs(clientId: string) {
   };
 
   return { logs, addLog };
+}
+
+function printClientCard(client: T__2, lastVisitTs?: bigint | undefined) {
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) return;
+  const lastVisit = lastVisitTs
+    ? new Date(Number(lastVisitTs / 1_000_000n)).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : "Never";
+  printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Client Card - ${client.name}</title>
+  <style>
+    body { font-family: sans-serif; padding: 32px; max-width: 400px; margin: 0 auto; color: #1a1a1a; }
+    .header { border-bottom: 2px solid #0066cc; padding-bottom: 12px; margin-bottom: 16px; }
+    .company { font-size: 13px; color: #666; margin-top: 4px; }
+    .field { margin: 8px 0; display: flex; gap: 8px; align-items: flex-start; }
+    .label { font-size: 11px; font-weight: 600; color: #666; text-transform: uppercase; min-width: 80px; }
+    .value { font-size: 13px; }
+    .footer { margin-top: 24px; font-size: 10px; color: #999; text-align: center; border-top: 1px solid #eee; padding-top: 12px; }
+    @media print { button { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1 style="margin:0;font-size:20px;">${client.name}</h1>
+    <p class="company">${client.company || "—"}</p>
+  </div>
+  <div class="field"><span class="label">Phone</span><span class="value">${client.phone || "—"}</span></div>
+  <div class="field"><span class="label">Email</span><span class="value">${client.email || "—"}</span></div>
+  <div class="field"><span class="label">Location</span><span class="value">${client.address || "—"}</span></div>
+  <div class="field"><span class="label">Last Visit</span><span class="value">${lastVisit}</span></div>
+  <div class="footer">Polypick Engineers Pvt Ltd | Generated ${new Date().toLocaleDateString("en-IN")}</div>
+  <br/>
+  <button onclick="window.print()" style="padding:8px 20px;background:#0066cc;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;">Print</button>
+</body>
+</html>`);
+  printWindow.document.close();
 }
 
 export default function ClientDetailPage() {
@@ -580,15 +623,26 @@ export default function ClientDetailPage() {
             {client.company}
           </p>
         </div>
-        <Button
-          variant="outline"
-          data-ocid="client.edit_button"
-          onClick={handleEditOpen}
-          className="gap-2 shrink-0"
-        >
-          <Pencil size={14} />
-          Edit Client
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            data-ocid="client.edit_button"
+            onClick={handleEditOpen}
+            className="gap-2 shrink-0"
+          >
+            <Pencil size={14} />
+            Edit Client
+          </Button>
+          <Button
+            variant="outline"
+            data-ocid="client.print_card.button"
+            onClick={() => printClientCard(client)}
+            className="gap-2 shrink-0"
+          >
+            <Printer size={14} />
+            Print Card
+          </Button>
+        </div>
       </div>
 
       {/* Tabbed Layout */}

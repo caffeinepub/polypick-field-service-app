@@ -734,6 +734,50 @@ type PhoneContactEntry = {
   include: boolean;
 };
 
+// ── Client Health Score ────────────────────────────────────────────────────────
+
+function computeHealthScore(
+  client: T__2,
+  lastVisitTs: bigint | undefined,
+): number {
+  let score = 0;
+  const now = Date.now();
+  if (lastVisitTs !== undefined) {
+    const lastMs = Number(lastVisitTs / 1_000_000n);
+    const diffDays = (now - lastMs) / (1000 * 60 * 60 * 24);
+    if (diffDays <= 7) score += 40;
+    else if (diffDays <= 30) score += 20;
+  }
+  if (client.phone) score += 10;
+  if (client.company) score += 10;
+  if (client.email) score += 10;
+  // Bonus if notes suggest active engagement (has industry/contacts tagged)
+  if (client.notes && client.notes.length > 30) score += 30;
+  return Math.min(100, score);
+}
+
+function HealthScoreBadge({ score }: { score: number }) {
+  if (score >= 80) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+        ✓ Healthy
+      </span>
+    );
+  }
+  if (score >= 50) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+        ~ Moderate
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-700 border border-red-200">
+      ! Attention
+    </span>
+  );
+}
+
 export default function ClientsPage() {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -998,9 +1042,7 @@ export default function ClientsPage() {
     const allClients = clients ?? [];
     setIsDeleting(true);
     try {
-      for (const c of allClients) {
-        await deleteClient.mutateAsync(c.id);
-      }
+      await Promise.all(allClients.map((c) => deleteClient.mutateAsync(c.id)));
       toast.success(`${allClients.length} clients deleted`);
       setDeleteAllOpen(false);
     } catch {
@@ -1691,6 +1733,9 @@ export default function ClientsPage() {
               <TableHead className="font-semibold">Mobile</TableHead>
               <TableHead className="font-semibold">Industry</TableHead>
 
+              <TableHead className="hidden lg:table-cell font-semibold">
+                Health
+              </TableHead>
               <TableHead className="w-24 text-right font-semibold">
                 Actions
               </TableHead>
@@ -1714,6 +1759,9 @@ export default function ClientsPage() {
                     <Skeleton className="h-4 w-24" />
                   </TableCell>
 
+                  <TableCell className="hidden lg:table-cell">
+                    <Skeleton className="h-4 w-16" />
+                  </TableCell>
                   <TableCell>
                     <Skeleton className="h-4 w-16 ml-auto" />
                   </TableCell>
@@ -1722,7 +1770,7 @@ export default function ClientsPage() {
             ) : filtered.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   data-ocid="clients.empty_state"
                   className="text-center py-12 text-muted-foreground"
                 >
@@ -1795,6 +1843,14 @@ export default function ClientsPage() {
                       )}
                     </TableCell>
 
+                    <TableCell className="hidden lg:table-cell">
+                      <HealthScoreBadge
+                        score={computeHealthScore(
+                          client,
+                          lastVisitMap.get(client.id.toString()),
+                        )}
+                      />
+                    </TableCell>
                     <TableCell className="hidden xl:table-cell">
                       {(() => {
                         const lastDate = lastVisitMap.get(client.id.toString());

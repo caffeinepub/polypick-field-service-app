@@ -28,6 +28,7 @@ import {
   BarChart3,
   CalendarCheck,
   FileText,
+  MessageCircle,
   Receipt,
   TrendingUp,
   Users,
@@ -301,16 +302,34 @@ export default function ReportsPage() {
             Business performance overview
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          data-ocid="reports.monthly_summary.open_modal_button"
-          onClick={() => setSummaryOpen(true)}
-          className="gap-2 self-start sm:self-auto"
-        >
-          <FileText size={15} />
-          Monthly Summary PDF
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            data-ocid="reports.monthly_summary.open_modal_button"
+            onClick={() => setSummaryOpen(true)}
+            className="gap-2 self-start sm:self-auto"
+          >
+            <FileText size={15} />
+            Monthly Summary PDF
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            data-ocid="reports.whatsapp.button"
+            onClick={() => {
+              const msg = `Polypick Engineers - Report Summary\nClients: ${Number(totalClients ?? 0)}\nPipeline: ${pipelineData.reduce((a, b) => a + b.value, 0)} entries\nPending Claims: ${pendingClaimsCount}\nApproved Amount: ₹${approvedClaimsTotal.toLocaleString("en-IN")}\n\nShared via Polypick Field App`;
+              window.open(
+                `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`,
+                "_blank",
+              );
+            }}
+            className="gap-2 self-start sm:self-auto text-green-700 border-green-300 hover:bg-green-50"
+          >
+            <MessageCircle size={15} />
+            Share on WhatsApp
+          </Button>
+        </div>
       </div>
 
       {/* KPI Cards */}

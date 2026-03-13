@@ -29,6 +29,15 @@ const LinerInstallationPage = lazy(
 );
 const StaffLocationPage = lazy(() => import("./pages/StaffLocationPage"));
 const WeeklyReportPage = lazy(() => import("./pages/WeeklyReportPage"));
+// New pages
+const RoutePlannerPage = lazy(() => import("./pages/RoutePlannerPage"));
+const InventoryPage = lazy(() => import("./pages/InventoryPage"));
+const QuotationPage = lazy(() => import("./pages/QuotationPage"));
+const DispatchTrackerPage = lazy(() => import("./pages/DispatchTrackerPage"));
+const AMCTrackerPage = lazy(() => import("./pages/AMCTrackerPage"));
+const StaffAttendancePage = lazy(() => import("./pages/StaffAttendancePage"));
+const ManagementReportPage = lazy(() => import("./pages/ManagementReportPage"));
+const LeaderboardPage = lazy(() => import("./pages/LeaderboardPage"));
 
 function PageLoader() {
   return (
@@ -191,6 +200,54 @@ const weeklyReportRoute = createRoute({
   component: withSuspense(WeeklyReportPage),
 });
 
+const routePlannerRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/route-planner",
+  component: withSuspense(RoutePlannerPage),
+});
+
+const inventoryRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/inventory",
+  component: withSuspense(InventoryPage),
+});
+
+const quotationRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/quotations",
+  component: withSuspense(QuotationPage),
+});
+
+const dispatchTrackerRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/dispatch",
+  component: withSuspense(DispatchTrackerPage),
+});
+
+const amcTrackerRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/amc",
+  component: withSuspense(AMCTrackerPage),
+});
+
+const staffAttendanceRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/attendance",
+  component: withSuspense(StaffAttendancePage),
+});
+
+const managementReportRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/mgmt-report",
+  component: withSuspense(ManagementReportPage),
+});
+
+const leaderboardRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/leaderboard",
+  component: withSuspense(LeaderboardPage),
+});
+
 export const routeTree = rootRoute.addChildren([
   loginRoute,
   profileSetupRoute,
@@ -214,5 +271,13 @@ export const routeTree = rootRoute.addChildren([
     linerInstallationRoute,
     staffLocationRoute,
     weeklyReportRoute,
+    routePlannerRoute,
+    inventoryRoute,
+    quotationRoute,
+    dispatchTrackerRoute,
+    amcTrackerRoute,
+    staffAttendanceRoute,
+    managementReportRoute,
+    leaderboardRoute,
   ]),
 ]);

@@ -15,6 +15,7 @@ import {
   FileDown,
   FileText,
   Loader2,
+  MessageCircle,
   Send,
   User,
 } from "lucide-react";
@@ -532,18 +533,36 @@ export default function DailyReportPage() {
             </h2>
             <div className="flex items-center gap-2">
               {visibleReports.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  data-ocid="daily_report.pdf.button"
-                  onClick={() =>
-                    printDailyReportsPDF(visibleReports, clientMap)
-                  }
-                  className="gap-2"
-                >
-                  <FileDown size={14} />
-                  Export PDF
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    data-ocid="daily_report.pdf.button"
+                    onClick={() =>
+                      printDailyReportsPDF(visibleReports, clientMap)
+                    }
+                    className="gap-2"
+                  >
+                    <FileDown size={14} />
+                    Export PDF
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    data-ocid="daily_report.whatsapp.button"
+                    onClick={() => {
+                      const msg = `Daily Reports Summary - ${new Date().toLocaleDateString("en-IN")}\nTotal Reports: ${visibleReports.length}\n\nShared via Polypick Field App`;
+                      window.open(
+                        `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`,
+                        "_blank",
+                      );
+                    }}
+                    className="gap-2 text-green-700 border-green-300 hover:bg-green-50"
+                  >
+                    <MessageCircle size={14} />
+                    Share
+                  </Button>
+                </div>
               )}
               <Badge variant="outline" className="text-xs">
                 {visibleReports.length} total
